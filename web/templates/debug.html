@@ -5,42 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Volleyball Schedule Watcher - Debug View</title>
     
+    <!-- Common CSS -->
+    <link rel="stylesheet" href="/static/css/common.css">
+    
     <!-- Feather Icons CDN -->
     <script src="https://unpkg.com/feather-icons"></script>
     
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #000000 100%);
-            min-height: 100vh;
-            padding: 20px;
-        }
-        
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-        }
-        
-        .header {
-            background: white;
-            border-radius: 12px;
-            padding: 30px;
-            margin-bottom: 30px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-        }
-        
-        h1 {
-            color: #333;
-            margin-bottom: 10px;
-            font-size: 2.5em;
-        }
-        
+        /* Page-specific styles for debug view */
         .info {
             color: #666;
             font-size: 14px;
@@ -55,29 +27,10 @@
         }
         
         .grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 30px;
             margin-bottom: 30px;
         }
         
-        @media (max-width: 768px) {
-            .grid {
-                grid-template-columns: 1fr;
-            }
-        }
-        
-        .section {
-            background: white;
-            border-radius: 12px;
-            padding: 25px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-        }
-        
         h2 {
-            color: #333;
-            margin-bottom: 20px;
-            font-size: 1.5em;
             display: flex;
             align-items: center;
             gap: 10px;
@@ -90,33 +43,6 @@
             border-radius: 12px;
             font-size: 0.8em;
             font-weight: normal;
-        }
-        
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-        
-        th {
-            background: #f7f7f7;
-            padding: 12px;
-            text-align: left;
-            font-weight: 600;
-            color: #666;
-            font-size: 12px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            border-bottom: 2px solid #e0e0e0;
-        }
-        
-        td {
-            padding: 12px;
-            border-bottom: 1px solid #f0f0f0;
-            color: #333;
-        }
-        
-        tr:hover {
-            background: #f9f9f9;
         }
         
         .game-id {
@@ -162,25 +88,7 @@
             font-size: 12px;
         }
         
-        .empty {
-            text-align: center;
-            padding: 40px;
-            color: #999;
-            font-style: italic;
-        }
-        
-        .future {
-            background: #e8f5e9;
-        }
-        
-        .past {
-            opacity: 0.6;
-        }
-        
-        .today {
-            background: #fff3e0;
-        }
-        
+        /* Use common classes from common.css */
         .refresh-btn {
             background: #667eea;
             color: white;
@@ -247,7 +155,7 @@
     </style>
 </head>
 <body>
-    <div class="container">
+    <div class="container container-lg">
         <div class="header">
             <h1>🏐 Volleyball Schedule Watcher</h1>
             <div class="info">
@@ -273,7 +181,7 @@
             </div>
         </div>
         
-        <div class="grid">
+        <div class="grid grid-2col">
             <div class="section">
                 <h2>All Games <span class="count">{{len .Games}}</span></h2>
                 {{if .Games}}
@@ -290,7 +198,7 @@
                     </thead>
                     <tbody>
                         {{range .Games}}
-                        <tr class="{{if gt .Date.Unix 0}}{{if lt .Date.Unix $.Now.Unix}}past{{else if eq (.Date.Format "2006-01-02") $.CurrentDate}}today{{else}}future{{end}}{{end}}">
+                        <tr class="{{if gt .Date.Unix 0}}{{if lt .Date.Unix $.Now.Unix}}game-past{{else if eq (.Date.Format "2006-01-02") $.CurrentDate}}game-today{{else}}game-future{{end}}{{end}}">
                             <td class="date">{{.Date.Format "Jan 2, 2006"}}</td>
                             <td><span class="time">{{.Time}}</span></td>
                             <td><span class="court">Court {{.Court}}</span></td>
@@ -302,7 +210,7 @@
                     </tbody>
                 </table>
                 {{else}}
-                <div class="empty">No games found</div>
+                <div class="empty-state">No games found</div>
                 {{end}}
             </div>
             
@@ -334,7 +242,7 @@
                     </tbody>
                 </table>
                 {{else}}
-                <div class="empty">No notifications sent yet</div>
+                <div class="empty-state">No notifications sent yet</div>
                 {{end}}
             </div>
         </div>

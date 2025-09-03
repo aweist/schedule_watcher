@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"io/fs"
 	"log"
 	"net/http"
 	"sort"
@@ -20,6 +21,9 @@ import (
 
 //go:embed templates/*
 var templates embed.FS
+
+//go:embed static/*
+var staticFiles embed.FS
 
 type Server struct {
 	storage   *storage.BoltStorage
@@ -53,6 +57,13 @@ func (s *Server) SetNotifiers(notifiers []notifier.Notifier) {
 }
 
 func (s *Server) Start(teamName string) {
+	// Serve static files
+	staticFS, err := fs.Sub(staticFiles, "static")
+	if err != nil {
+		log.Printf("Failed to create static file system: %v", err)
+	}
+	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFS))))
+	
 	http.HandleFunc("/", s.handleDebugPage(teamName))
 	http.HandleFunc("/admin", s.handleAdminPage)
 	http.HandleFunc("/api/games", s.handleAPIGames)
