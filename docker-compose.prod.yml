@@ -2,11 +2,7 @@ version: '3.8'
 
 services:
   schedule-watcher:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        - BUILD_TIME=${BUILD_TIME:-$(date +%s)}
+    image: ghcr.io/${DOCKER_USERNAME}/schedule-watcher:${VERSION:-latest}
     container_name: volleyball-schedule-watcher
     restart: unless-stopped
     environment:
@@ -25,6 +21,7 @@ services:
       - SMTP_USERNAME=${SMTP_USERNAME}
       - SMTP_PASSWORD=${SMTP_PASSWORD}
       - EMAIL_FROM=${EMAIL_FROM}
+      - EMAIL_TO=${EMAIL_TO}
       
       # Storage Configuration
       - DB_PATH=/data/schedule.db
@@ -43,10 +40,14 @@ services:
       - "${WEB_PORT:-8080}:${WEB_PORT:-8080}"
     
     volumes:
-      - ./data:/data
+      - schedule-data:/data
     
     logging:
       driver: "json-file"
       options:
         max-size: "10m"
         max-file: "3"
+
+volumes:
+  schedule-data:
+    driver: local
