@@ -171,6 +171,24 @@ func (e *EmailNotifier) buildEmailBody(game models.Game) (string, error) {
             font-size: 12px;
             color: #7f8c8d;
         }
+        .schedule-link {
+            display: block;
+            text-align: center;
+            margin: 25px 0;
+        }
+        .schedule-link a {
+            display: inline-block;
+            padding: 12px 30px;
+            background-color: #2c3e50;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: bold;
+            transition: background-color 0.3s;
+        }
+        .schedule-link a:hover {
+            background-color: #34495e;
+        }
     </style>
 </head>
 <body>
@@ -195,6 +213,10 @@ func (e *EmailNotifier) buildEmailBody(game models.Game) (string, error) {
                 <div class="detail-row">
                     <span class="label">Team:</span> {{.TeamCaptain}} (#{{.TeamNumber}})
                 </div>
+            </div>
+            
+            <div class="schedule-link">
+                <a href="https://winlossdraw.com/ivp" target="_blank">See the full schedule here</a>
             </div>
             
             <p>Remember to suck the head!</p>
