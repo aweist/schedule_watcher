@@ -12,6 +12,7 @@ import (
 const (
 	bucketGames = "games"
 	bucketNotified = "notified"
+	bucketRecipients = "recipients"
 )
 
 type BoltStorage struct {
@@ -33,6 +34,11 @@ func NewBoltStorage(dbPath string) (*BoltStorage, error) {
 		_, err = tx.CreateBucketIfNotExists([]byte(bucketNotified))
 		if err != nil {
 			return fmt.Errorf("creating notified bucket: %w", err)
+		}
+		
+		_, err = tx.CreateBucketIfNotExists([]byte(bucketRecipients))
+		if err != nil {
+			return fmt.Errorf("creating recipients bucket: %w", err)
 		}
 		
 		return nil
@@ -206,4 +212,88 @@ func (s *BoltStorage) CleanupOldNotifications(before time.Time) error {
 		
 		return nil
 	})
+}
+
+func (s *BoltStorage) AddEmailRecipient(recipient models.EmailRecipient) error {
+	return s.db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(bucketRecipients))
+		
+		data, err := json.Marshal(recipient)
+		if err != nil {
+			return fmt.Errorf("marshaling recipient: %w", err)
+		}
+		
+		return b.Put([]byte(recipient.ID), data)
+	})
+}
+
+func (s *BoltStorage) GetEmailRecipient(id string) (*models.EmailRecipient, error) {
+	var recipient models.EmailRecipient
+	
+	err := s.db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(bucketRecipients))
+		data := b.Get([]byte(id))
+		
+		if data == nil {
+			return nil
+		}
+		
+		return json.Unmarshal(data, &recipient)
+	})
+	
+	if err != nil {
+		return nil, err
+	}
+	
+	if recipient.ID == "" {
+		return nil, nil
+	}
+	
+	return &recipient, nil
+}
+
+func (s *BoltStorage) GetAllEmailRecipients() ([]models.EmailRecipient, error) {
+	var recipients []models.EmailRecipient
+	
+	err := s.db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(bucketRecipients))
+		
+		return b.ForEach(func(k, v []byte) error {
+			var recipient models.EmailRecipient
+			if err := json.Unmarshal(v, &recipient); err != nil {
+				return err
+			}
+			recipients = append(recipients, recipient)
+			return nil
+		})
+	})
+	
+	return recipients, err
+}
+
+func (s *BoltStorage) GetActiveEmailRecipients() ([]models.EmailRecipient, error) {
+	all, err := s.GetAllEmailRecipients()
+	if err != nil {
+		return nil, err
+	}
+	
+	var active []models.EmailRecipient
+	for _, r := range all {
+		if r.IsActive {
+			active = append(active, r)
+		}
+	}
+	
+	return active, nil
+}
+
+func (s *BoltStorage) DeleteEmailRecipient(id string) error {
+	return s.db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(bucketRecipients))
+		return b.Delete([]byte(id))
+	})
+}
+
+func (s *BoltStorage) UpdateEmailRecipient(recipient models.EmailRecipient) error {
+	return s.AddEmailRecipient(recipient)
 }

@@ -16,8 +16,12 @@ type EmailNotifier struct {
 	username string
 	password string
 	from     string
-	to       []string
 	teamName string
+	storage  EmailStorage
+}
+
+type EmailStorage interface {
+	GetActiveEmailRecipients() ([]models.EmailRecipient, error)
 }
 
 type EmailConfig struct {
@@ -26,8 +30,8 @@ type EmailConfig struct {
 	Username string
 	Password string
 	From     string
-	To       []string
 	TeamName string
+	Storage  EmailStorage
 }
 
 func NewEmailNotifier(config EmailConfig) *EmailNotifier {
@@ -37,8 +41,8 @@ func NewEmailNotifier(config EmailConfig) *EmailNotifier {
 		username: config.Username,
 		password: config.Password,
 		from:     config.From,
-		to:       config.To,
 		teamName: config.TeamName,
+		storage:  config.Storage,
 	}
 }
 
@@ -47,18 +51,28 @@ func (e *EmailNotifier) GetType() string {
 }
 
 func (e *EmailNotifier) SendNotification(game models.Game) error {
+	// Get recipients from database
+	recipients, err := e.getRecipients()
+	if err != nil {
+		return fmt.Errorf("getting recipients: %w", err)
+	}
+	
+	if len(recipients) == 0 {
+		return fmt.Errorf("no active email recipients configured")
+	}
+
 	subject := fmt.Sprintf("New Volleyball Game Scheduled - %s", game.Date.Format("Mon, Jan 2"))
 	body, err := e.buildEmailBody(game)
 	if err != nil {
 		return fmt.Errorf("building email body: %w", err)
 	}
 
-	message := e.buildMessage(subject, body)
+	message := e.buildMessage(subject, body, recipients)
 
 	auth := smtp.PlainAuth("", e.username, e.password, e.smtpHost)
 	addr := fmt.Sprintf("%s:%s", e.smtpHost, e.smtpPort)
 
-	err = smtp.SendMail(addr, auth, e.from, e.to, []byte(message))
+	err = smtp.SendMail(addr, auth, e.from, recipients, []byte(message))
 	if err != nil {
 		return fmt.Errorf("sending email: %w", err)
 	}
@@ -66,10 +80,33 @@ func (e *EmailNotifier) SendNotification(game models.Game) error {
 	return nil
 }
 
-func (e *EmailNotifier) buildMessage(subject, body string) string {
+func (e *EmailNotifier) getRecipients() ([]string, error) {
+	// Storage is required for getting recipients
+	if e.storage == nil {
+		return nil, fmt.Errorf("no storage configured for email recipients")
+	}
+	
+	dbRecipients, err := e.storage.GetActiveEmailRecipients()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get recipients from database: %w", err)
+	}
+	
+	var emails []string
+	for _, r := range dbRecipients {
+		emails = append(emails, r.Email)
+	}
+	
+	if len(emails) == 0 {
+		return nil, fmt.Errorf("no active email recipients in database")
+	}
+	
+	return emails, nil
+}
+
+func (e *EmailNotifier) buildMessage(subject, body string, recipients []string) string {
 	headers := make(map[string]string)
-	headers["From"] = e.from
-	headers["To"] = strings.Join(e.to, ", ")
+	headers["From"] = fmt.Sprintf("IVP Game Alerts <%s>", e.from)
+	headers["To"] = strings.Join(recipients, ", ")
 	headers["Subject"] = subject
 	headers["MIME-Version"] = "1.0"
 	headers["Content-Type"] = "text/html; charset=UTF-8"

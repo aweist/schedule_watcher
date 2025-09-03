@@ -36,8 +36,8 @@ func main() {
 			Username: cfg.Email.Username,
 			Password: cfg.Email.Password,
 			From:     cfg.Email.From,
-			To:       cfg.Email.To,
 			TeamName: cfg.Team.Name,
+			Storage:  db,
 		})
 		notifiers = append(notifiers, emailNotifier)
 		log.Println("Email notifications enabled")

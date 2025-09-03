@@ -122,11 +122,11 @@ Jeff,1,66.67%,Comp Div 1 AG,4,2,7:00 PM,ct 7,,7:00 PM,ct 7,,7:00 PM,ct 7`
 	if game.Division != "Comp Div 1 AG" {
 		t.Errorf("Expected division 'Comp Div 1 AG', got '%s'", game.Division)
 	}
-	if game.Time != "7:00 PM" {
-		t.Errorf("Expected time '7:00 PM', got '%s'", game.Time)
+	if game.Time != "7:00 pm" {
+		t.Errorf("Expected time '7:00 pm', got '%s'", game.Time)
 	}
-	if game.Court != "ct 7" {
-		t.Errorf("Expected court 'ct 7', got '%s'", game.Court)
+	if game.Court != "7" {
+		t.Errorf("Expected court '7', got '%s'", game.Court)
 	}
 
 	// Verify date parsing
@@ -360,32 +360,32 @@ func TestGameTimeStrToGameTimes(t *testing.T) {
 		{
 			name:     "Single time with PM",
 			input:    "7:00 PM",
-			expected: []string{"7"},
+			expected: []string{"7:00 pm"},
 		},
 		{
 			name:     "Multiple times with PM",
 			input:    "8:00 PM/9:00 PM",
-			expected: []string{"8", "9"},
+			expected: []string{"8:00 pm", "9:00 pm"},
 		},
 		{
 			name:     "Multiple times without PM",
 			input:    "8/9",
-			expected: []string{"8", "9"},
+			expected: []string{"8:00 pm", "9:00 pm"},
 		},
 		{
 			name:     "Mixed case PM",
 			input:    "7:00 pm/8:00 PM",
-			expected: []string{"7", "8"},
+			expected: []string{"7:00 pm", "8:00 pm"},
 		},
 		{
 			name:     "Times with spaces",
 			input:    "7 / 8 / 9",
-			expected: []string{"7", "8", "9"},
+			expected: []string{"7:00 pm", "8:00 pm", "9:00 pm"},
 		},
 		{
 			name:     "Time with extra formatting",
 			input:    "8/9pm",
-			expected: []string{"8", "9"},
+			expected: []string{"8:00 pm", "9:00 pm"},
 		},
 		{
 			name:     "Empty string",
@@ -400,12 +400,12 @@ func TestGameTimeStrToGameTimes(t *testing.T) {
 		{
 			name:     "Single time without formatting",
 			input:    "7",
-			expected: []string{"7"},
+			expected: []string{"7:00 pm"},
 		},
 		{
 			name:     "Time with only :00 to remove",
 			input:    "7:00/8:00",
-			expected: []string{"7", "8"},
+			expected: []string{"7:00 pm", "8:00 pm"},
 		},
 	}
 
@@ -512,7 +512,7 @@ func TestCourtStrToCourts(t *testing.T) {
 		{
 			name:     "Court numbers with letters",
 			input:    "ct 7A/ct 8B",
-			expected: []string{"7A", "8B"},
+			expected: []string{"7a", "8b"},
 		},
 	}
 

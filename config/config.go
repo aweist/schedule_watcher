@@ -84,37 +84,33 @@ func (c *Config) Validate() error {
 	if c.API.BaseURL == "" {
 		return fmt.Errorf("api.base_url is required")
 	}
-	
+
 	if c.API.Instance == "" {
 		return fmt.Errorf("api.instance is required")
 	}
-	
+
 	if c.API.CompID == "" {
 		return fmt.Errorf("api.comp_id is required")
 	}
-	
+
 	if c.Team.Name == "" {
 		return fmt.Errorf("team.name is required")
 	}
-	
+
 	if c.Email.Enabled {
 		if c.Email.SMTPHost == "" {
 			return fmt.Errorf("email.smtp_host is required when email is enabled")
 		}
-		
+
 		if c.Email.From == "" {
 			return fmt.Errorf("email.from is required when email is enabled")
 		}
-		
-		if len(c.Email.To) == 0 || c.Email.To[0] == "" {
-			return fmt.Errorf("email.to is required when email is enabled")
-		}
 	}
-	
+
 	if _, err := time.ParseDuration(c.Schedule.PollInterval); err != nil {
 		return fmt.Errorf("invalid poll_interval: %w", err)
 	}
-	
+
 	return nil
 }
 

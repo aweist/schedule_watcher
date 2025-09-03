@@ -1,13 +1,16 @@
 package web
 
 import (
+	"crypto/rand"
 	"embed"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"html/template"
 	"log"
 	"net/http"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/aweist/schedule-watcher/models"
@@ -33,6 +36,10 @@ type PageData struct {
 	TeamName      string
 }
 
+type AdminPageData struct {
+	Recipients []models.EmailRecipient
+}
+
 func NewServer(storage *storage.BoltStorage, port string) *Server {
 	return &Server{
 		storage:   storage,
@@ -47,11 +54,15 @@ func (s *Server) SetNotifiers(notifiers []notifier.Notifier) {
 
 func (s *Server) Start(teamName string) {
 	http.HandleFunc("/", s.handleDebugPage(teamName))
+	http.HandleFunc("/admin", s.handleAdminPage)
 	http.HandleFunc("/api/games", s.handleAPIGames)
 	http.HandleFunc("/api/notified", s.handleAPINotified)
 	http.HandleFunc("/api/game/delete", s.handleDeleteGame)
 	http.HandleFunc("/api/notified/delete", s.handleDeleteNotifiedGame)
 	http.HandleFunc("/api/test-email", s.handleTestEmail)
+	http.HandleFunc("/api/recipients/add", s.handleAddRecipient)
+	http.HandleFunc("/api/recipients/delete", s.handleDeleteRecipient)
+	http.HandleFunc("/api/recipients/toggle", s.handleToggleRecipient)
 	
 	log.Printf("Starting debug web server on http://localhost:%s", s.port)
 	if err := http.ListenAndServe(":"+s.port, nil); err != nil {
@@ -218,4 +229,165 @@ func (s *Server) handleTestEmail(w http.ResponseWriter, r *http.Request) {
 		"status": "success",
 		"message": "Test email sent successfully!",
 	})
+}
+
+func (s *Server) handleAdminPage(w http.ResponseWriter, r *http.Request) {
+	tmpl, err := template.ParseFS(templates, "templates/admin.html")
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Template error: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	recipients, err := s.storage.GetAllEmailRecipients()
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error fetching recipients: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Sort recipients by name
+	sort.Slice(recipients, func(i, j int) bool {
+		return recipients[i].Name < recipients[j].Name
+	})
+
+	data := AdminPageData{
+		Recipients: recipients,
+	}
+
+	if err := tmpl.Execute(w, data); err != nil {
+		http.Error(w, fmt.Sprintf("Template execution error: %v", err), http.StatusInternalServerError)
+	}
+}
+
+func generateID() string {
+	bytes := make([]byte, 8)
+	rand.Read(bytes)
+	return hex.EncodeToString(bytes)
+}
+
+func (s *Server) handleAddRecipient(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	name := r.FormValue("name")
+	email := r.FormValue("email")
+
+	if name == "" || email == "" {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{
+			"status": "error",
+			"message": "Name and email are required",
+		})
+		return
+	}
+
+	recipient := models.EmailRecipient{
+		ID:       generateID(),
+		Name:     name,
+		Email:    email,
+		AddedAt:  time.Now(),
+		IsActive: true,
+	}
+
+	if err := s.storage.AddEmailRecipient(recipient); err != nil {
+		log.Printf("Error adding recipient: %v", err)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{
+			"status": "error",
+			"message": "Error adding recipient",
+		})
+		return
+	}
+
+	log.Printf("Added email recipient: %s (%s)", name, email)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+}
+
+func (s *Server) handleDeleteRecipient(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	recipientID := r.FormValue("id")
+	if recipientID == "" {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{
+			"status": "error",
+			"message": "Recipient ID is required",
+		})
+		return
+	}
+
+	if err := s.storage.DeleteEmailRecipient(recipientID); err != nil {
+		log.Printf("Error deleting recipient: %v", err)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{
+			"status": "error",
+			"message": "Error deleting recipient",
+		})
+		return
+	}
+
+	log.Printf("Deleted email recipient: %s", recipientID)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+}
+
+func (s *Server) handleToggleRecipient(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	recipientID := r.FormValue("id")
+	activeStr := r.FormValue("active")
+
+	if recipientID == "" || activeStr == "" {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{
+			"status": "error",
+			"message": "Recipient ID and active status are required",
+		})
+		return
+	}
+
+	active, err := strconv.ParseBool(activeStr)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{
+			"status": "error",
+			"message": "Invalid active status",
+		})
+		return
+	}
+
+	// Get existing recipient
+	recipient, err := s.storage.GetEmailRecipient(recipientID)
+	if err != nil || recipient == nil {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{
+			"status": "error",
+			"message": "Recipient not found",
+		})
+		return
+	}
+
+	// Update status
+	recipient.IsActive = active
+	if err := s.storage.UpdateEmailRecipient(*recipient); err != nil {
+		log.Printf("Error updating recipient: %v", err)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{
+			"status": "error",
+			"message": "Error updating recipient",
+		})
+		return
+	}
+
+	log.Printf("Updated recipient %s (%s) - Active: %v", recipient.Name, recipient.Email, active)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
 }

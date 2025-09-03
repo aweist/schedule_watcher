@@ -27,3 +27,11 @@ type NotifiedGame struct {
 	GameTime    string    `json:"game_time"`
 	Court       string    `json:"court"`
 }
+
+type EmailRecipient struct {
+	ID          string    `json:"id"`
+	Email       string    `json:"email"`
+	Name        string    `json:"name"`
+	AddedAt     time.Time `json:"added_at"`
+	IsActive    bool      `json:"is_active"`
+}

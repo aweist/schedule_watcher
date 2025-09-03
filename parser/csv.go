@@ -108,6 +108,7 @@ func gameTimeStrToGameTimes(s string) []string {
 		if part == "" {
 			continue
 		}
+		part += ":00 pm"
 		gameTimes = append(gameTimes, part)
 	}
 	return gameTimes
