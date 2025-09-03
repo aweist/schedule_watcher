@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  schedule-watcher:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - BUILD_TIME=${BUILD_TIME:-$(date +%s)}
+    container_name: volleyball-schedule-watcher
+    restart: unless-stopped
+    environment:
+      # API Configuration
+      - API_BASE_URL=https://wix-visual-data.appspot.com
+      - API_INSTANCE=${API_INSTANCE}
+      - API_COMP_ID=${API_COMP_ID}
+      
+      # Team Configuration
+      - TEAM_NAME=${TEAM_NAME}
+      
+      # Email Configuration
+      - EMAIL_ENABLED=true
+      - SMTP_HOST=${SMTP_HOST:-smtp.gmail.com}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USERNAME=${SMTP_USERNAME}
+      - SMTP_PASSWORD=${SMTP_PASSWORD}
+      - EMAIL_FROM=${EMAIL_FROM}
+      - EMAIL_TO=${EMAIL_TO}
+      
+      # Storage Configuration
+      - DB_PATH=/data/schedule.db
+      
+      # Schedule Configuration
+      - POLL_INTERVAL=${POLL_INTERVAL:-5m}
+      
+      # Web Debug Interface
+      - WEB_ENABLED=${WEB_ENABLED:-true}
+      - WEB_PORT=${WEB_PORT:-8080}
+      
+      # Timezone
+      - TZ=${TZ:-America/Denver}
+    
+    ports:
+      - "${WEB_PORT:-8080}:${WEB_PORT:-8080}"
+    
+    volumes:
+      - ./data:/data
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
