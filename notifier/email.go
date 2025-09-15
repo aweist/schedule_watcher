@@ -2,9 +2,12 @@ package notifier
 
 import (
 	"bytes"
+	"encoding/base64"
 	"fmt"
 	"html/template"
+	"mime/multipart"
 	"net/smtp"
+	"net/textproto"
 	"strings"
 
 	"github.com/aweist/schedule-watcher/models"
@@ -67,7 +70,11 @@ func (e *EmailNotifier) SendNotification(game models.Game) error {
 		return fmt.Errorf("building email body: %w", err)
 	}
 
-	message := e.buildMessage(subject, body, recipients)
+	// Generate ICS calendar content
+	icsContent := GenerateICS(game)
+	
+	// Build message with attachment
+	message := e.buildMessageWithAttachment(subject, body, recipients, icsContent, game.Date.Format("2006-01-02"))
 
 	auth := smtp.PlainAuth("", e.username, e.password, e.smtpHost)
 	addr := fmt.Sprintf("%s:%s", e.smtpHost, e.smtpPort)
@@ -103,23 +110,56 @@ func (e *EmailNotifier) getRecipients() ([]string, error) {
 	return emails, nil
 }
 
-func (e *EmailNotifier) buildMessage(subject, body string, recipients []string) string {
+func (e *EmailNotifier) buildMessageWithAttachment(subject, body string, recipients []string, icsContent string, dateStr string) string {
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+	
+	// Write email headers
 	headers := make(map[string]string)
 	headers["From"] = fmt.Sprintf("IVP Game Alerts <%s>", e.from)
 	headers["To"] = strings.Join(recipients, ", ")
 	headers["Subject"] = subject
 	headers["MIME-Version"] = "1.0"
-	headers["Content-Type"] = "text/html; charset=UTF-8"
-
+	headers["Content-Type"] = fmt.Sprintf("multipart/mixed; boundary=%s", writer.Boundary())
+	
 	var message strings.Builder
 	for k, v := range headers {
 		message.WriteString(fmt.Sprintf("%s: %s\r\n", k, v))
 	}
 	message.WriteString("\r\n")
-	message.WriteString(body)
-
+	
+	// Create HTML part
+	htmlPart, _ := writer.CreatePart(textproto.MIMEHeader{
+		"Content-Type": []string{"text/html; charset=UTF-8"},
+	})
+	htmlPart.Write([]byte(body))
+	
+	// Create ICS attachment part
+	icsPart, _ := writer.CreatePart(textproto.MIMEHeader{
+		"Content-Type":              []string{"text/calendar; charset=UTF-8; method=REQUEST"},
+		"Content-Transfer-Encoding": []string{"base64"},
+		"Content-Disposition":       []string{fmt.Sprintf("attachment; filename=\"volleyball-game-%s.ics\"", dateStr)},
+	})
+	
+	// Encode ICS content in base64
+	encoded := base64.StdEncoding.EncodeToString([]byte(icsContent))
+	// Add line breaks every 76 characters for proper email formatting
+	for i := 0; i < len(encoded); i += 76 {
+		end := i + 76
+		if end > len(encoded) {
+			end = len(encoded)
+		}
+		icsPart.Write([]byte(encoded[i:end] + "\r\n"))
+	}
+	
+	writer.Close()
+	
+	// Combine headers and body
+	message.Write(buf.Bytes())
+	
 	return message.String()
 }
+
 
 func (e *EmailNotifier) buildEmailBody(game models.Game) (string, error) {
 	tmplStr := `
@@ -214,6 +254,10 @@ func (e *EmailNotifier) buildEmailBody(game models.Game) (string, error) {
                     <span class="label">Team:</span> {{.TeamCaptain}} (#{{.TeamNumber}})
                 </div>
             </div>
+            
+            <p style="text-align: center; margin: 20px 0;">
+                <em>📅 A calendar invite is attached to this email</em>
+            </p>
             
             <div class="schedule-link">
                 <a href="https://winlossdraw.com/ivp" target="_blank">See the full schedule here</a>
