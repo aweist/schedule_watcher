@@ -63,16 +63,19 @@ echo "🔍 Verifying image push..."
 if docker manifest inspect "${FULL_IMAGE_NAME}" > /dev/null 2>&1; then
     echo "✅ Image verified in registry!"
     
-    # Ask if user wants to deploy to NAS
-    read -p "Deploy to NAS now? (y/n): " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        echo "🚀 Deploying to NAS..."
-        ssh teknonas 'bash -s' < ./scripts/deploy.sh
+    # Only ask about deployment if running interactively (not piped)
+    if [[ -t 0 ]]; then
+        # Ask if user wants to deploy to NAS
+        read -p "Deploy to NAS now? (y/n): " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            echo "🚀 Deploying to NAS..."
+            ssh teknonas 'bash -s' < ./scripts/deploy.sh
+        fi
     fi
 else
     echo "❌ Failed to verify image in registry!"
     exit 1
 fi
 
-echo "Done!"
+echo "✨ Build and push completed!"
