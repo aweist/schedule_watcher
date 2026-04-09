@@ -49,6 +49,7 @@ jobs:
           key: ${{ secrets.DROPLET_SSH_KEY }}
           script: |
             cd /opt/schedule-watcher
+            git pull origin main
             docker compose pull
             docker compose down
             docker compose up -d
