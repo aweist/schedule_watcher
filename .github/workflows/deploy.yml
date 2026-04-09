@@ -50,7 +50,7 @@ jobs:
           script: |
             cd /opt/schedule-watcher
             git pull origin main
-            docker compose pull
-            docker compose down
-            docker compose up -d
+            docker compose -f docker-compose.prod.yml pull
+            docker compose -f docker-compose.prod.yml down
+            docker compose -f docker-compose.prod.yml up -d
             docker image prune -f

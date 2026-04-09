@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   schedule-watcher:
     image: ghcr.io/${DOCKER_USERNAME}/schedule_watcher:${VERSION:-latest}
