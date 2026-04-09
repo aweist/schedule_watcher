@@ -44,6 +44,10 @@ type AdminPageData struct {
 	Recipients []models.EmailRecipient
 }
 
+type SnapshotsPageData struct {
+	Snapshots []models.Snapshot
+}
+
 func NewServer(storage *storage.BoltStorage, port string) *Server {
 	return &Server{
 		storage:   storage,
@@ -66,6 +70,7 @@ func (s *Server) Start(teamName string) {
 	
 	http.HandleFunc("/", s.handleDebugPage(teamName))
 	http.HandleFunc("/admin", s.handleAdminPage)
+	http.HandleFunc("/snapshots", s.handleSnapshotsPage)
 	http.HandleFunc("/api/games", s.handleAPIGames)
 	http.HandleFunc("/api/notified", s.handleAPINotified)
 	http.HandleFunc("/api/game/delete", s.handleDeleteGame)
@@ -262,6 +267,33 @@ func (s *Server) handleAdminPage(w http.ResponseWriter, r *http.Request) {
 
 	data := AdminPageData{
 		Recipients: recipients,
+	}
+
+	if err := tmpl.Execute(w, data); err != nil {
+		http.Error(w, fmt.Sprintf("Template execution error: %v", err), http.StatusInternalServerError)
+	}
+}
+
+func (s *Server) handleSnapshotsPage(w http.ResponseWriter, r *http.Request) {
+	tmpl, err := template.ParseFS(templates, "templates/snapshots.html")
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Template error: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	snapshots, err := s.storage.GetAllSnapshots()
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error fetching snapshots: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Sort by fetched time, most recent first
+	sort.Slice(snapshots, func(i, j int) bool {
+		return snapshots[i].FetchedAt.After(snapshots[j].FetchedAt)
+	})
+
+	data := SnapshotsPageData{
+		Snapshots: snapshots,
 	}
 
 	if err := tmpl.Execute(w, data); err != nil {

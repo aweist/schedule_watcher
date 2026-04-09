@@ -35,3 +35,10 @@ type EmailRecipient struct {
 	AddedAt     time.Time `json:"added_at"`
 	IsActive    bool      `json:"is_active"`
 }
+
+type Snapshot struct {
+	ID        string    `json:"id"`
+	CSVData   string    `json:"csv_data"`
+	Hash      string    `json:"hash"`
+	FetchedAt time.Time `json:"fetched_at"`
+}

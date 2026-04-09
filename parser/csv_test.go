@@ -3,6 +3,8 @@ package parser
 import (
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestCSVParser_ParseSchedule(t *testing.T) {
@@ -75,6 +77,58 @@ Daghera Hewlett @,17,0.00%,Comp Div 1 AG,0,6,7:00 PM,ct 6,,6:00 PM,ct 6,,8/9pm,c
 				t.Errorf("ParseSchedule() got %d games, want %d", len(games), tt.expected)
 				return
 			}
+
+			// Verify game structure for first game if any exist
+			if len(games) > 0 {
+				game := games[0]
+				if game.ID == "" {
+					t.Error("Game ID should not be empty")
+				}
+				if game.TeamCaptain == "" {
+					t.Error("Team captain should not be empty")
+				}
+				if game.Time == "" {
+					t.Error("Game time should not be empty")
+				}
+				if game.Court == "" {
+					t.Error("Court should not be empty")
+				}
+			}
+		})
+	}
+}
+
+// CSV format appears to have changed as of Spring 2026 season, so added test with new format to ensure parsing still works correctly
+func TestCSVParser_ParseScheduleSpring2026(t *testing.T) {
+	// Sample CSV data based on the actual API response
+	csvData := " ,Team #,Division,Win %,Wins,Loss,time,4/2/2026,,time,04/09,,Time,04/16,,Time,04/23,,Time,04/30,,Time,05/07,,Time,05/14,,Time,05/21,,Time,05/28,,Time,06/04\r\nCory G,1,Comp 4s AG,100.00%,3,0,7:00 PM,ct 5,,,,,,,,,,,,,,,,,,,,,,,,,,,\r\nErika G,2,Comp 4s AG,100.00%,3,0,8:00 PM,ct 5,,,,,,,,,,,,,,,,,,,,,,,,,,,\r\nTaylor Sisneros,3,Comp 4s AG,66.67%,2,1,8:00 PM,ct 7,,,,,,,,,,,,,,,,,,,,,,,,,,,\r\nAlex Lugo #1,4,Comp 4s AG,33.33%,1,2,6:00 PM,ct 5,,,,,,,,,,,,,,,,,,,,,,,,,,,\r\nAlex Lugo # 2,5,Comp 4s AG,0.00%,0,3,7:00 PM,ct 5,,,,,,,,,,,,,,,,,,,,,,,,,,,\r\nJeff Hoover,6,Comp 4s AG,66.67%,2,1,7:00 PM,ct 7,,,,,,,,,,,,,,,,,,,,,,,,,,,\r\nBrandon Hall,7,Comp 4s AG,33.33%,1,2,7:00 PM,ct 6,,,,,,,,,,,,,,,,,,,,,,,,,,,\r\nGabby Cuomo,8,Comp 4s AG,0.00%,0,3,8:00 PM,ct 5,,,,,,,,,,,,,,,,,,,,,,,,,,,\r\nAshleigh/Patrick,9,Comp 4s AG,66.67%,2,1,6:00 PM,ct 5,,,,,,,,,,,,,,,,,,,,,,,,,,,\r\nKris Adkins,10,Comp 4s AG,100.00%,3,0,8:00 PM,ct 6,,,,,,,,,,,,,,,,,,,,,,,,,,,\r\nTyler Adkins,11,Comp 4s AG,100.00%,3,0,6:00 PM,ct 7,,,,,,,,,,,,,,,,,,,,,,,,,,,\r\nKalin Hannon,12,Comp 4s AG,33.33%,1,2,8:00 PM,ct 7,,,,,,,,,,,,,,,,,,,,,,,,,,,\r\nDerek Valdez,13,Comp 4s AG,0.00%,0,3,8:00 PM,ct 6,,,,,,,,,,,,,,,,,,,,,,,,,,,\r\nTravis Hannon,14,Comp 4s AG,33.33%,1,2,7:00 PM,ct 7,,,,,,,,,,,,,,,,,,,,,,,,,,,\r\nKyle Smith,15,Comp 4s AG,0.00%,0,3,6:00 PM,ct 7,,,,,,,,,,,,,,,,,,,,,,,,,,,\r\nNick Hancock,16,Comp 4s AG,66.67%,2,1,7:00 PM,ct 6,,,,,,,,,,,,,,,,,,,,,,,,,,,\r\nTrent Thompson,17,Comp 4s AG,#DIV/0!,,,9:00 PM,ct 6,,,,,,,,,,,,,,,,,,,,,,,,,,,\r\n,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,\r\n,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,\r\n,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,\r\n,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,\r\n,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,\r\n,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,\r\nJesus Vasquez,1,Fun 4s  AG,0.00%,0,3,6:00 PM,ct 4,,8:00 PM,ct 4,,,,,,,,,,,,,,,,,,,,,,,,\r\nJesse Mittino,2,Fun 4s  AG,100.00%,3,0,6:00 PM,ct 4,,9:00 PM,ct 4,,,,,,,,,,,,,,,,,,,,,,,,\r\nJeff Hoover,3,Fun 4s  AG,100.00%,3,0,8:00 PM,ct 4,,8:00 PM,ct 3,,,,,,,,,,,,,,,,,,,,,,,,\r\nCicada Zehner  #1,4,Fun 4s  AG,33.33%,1,2,7:00 PM,ct 4,,6:00 PM,ct 3,,,,,,,,,,,,,,,,,,,,,,,,\r\nCicada Zehner   #2,5,Fun 4s  AG,0.00%,0,3,8:00 PM,ct 4,,7:00 PM,ct 4,,,,,,,,,,,,,,,,,,,,,,,,\r\nDaniel Castaneda  #1,6,Fun 4s  AG,100.00%,3,0,6:00 PM,ct 1,,6:00 PM,ct 1,,,,,,,,,,,,,,,,,,,,,,,,\r\nDaniel Castaneda  #2,7,Fun 4s  AG,66.67%,2,1,7:00 PM,ct 1,,7:00 PM,ct 3,,,,,,,,,,,,,,,,,,,,,,,,\r\nDaniel Castaneda  #3,8,Fun 4s  AG,33.33%,1,2,8:00 PM,ct 1,,8:00 PM,ct 3,,,,,,,,,,,,,,,,,,,,,,,,\r\nDave Morgan,9,Fun 4s  AG,66.67%,2,1,8:00 PM,ct 1,,9:00 PM,ct 4,,,,,,,,,,,,,,,,,,,,,,,,\r\nZak Hannon,10,Fun 4s  AG,33.33%,1,2,7:00 PM,ct 13,,7:00 PM,ct 3,,,,,,,,,,,,,,,,,,,,,,,,\r\nMichael Dugan,11,Fun 4s  AG,100.00%,3,0,9:00 PM,ct 3,,8:00 PM,ct 4,,,,,,,,,,,,,,,,,,,,,,,,\r\nKevin Knuth,12,Fun 4s  AG,33.33%,1,2,7:00 PM,ct 1,,9:00 PM,ct 3,,,,,,,,,,,,,,,,,,,,,,,,\r\nAlexa Cordray,13,Fun 4s  AG,0.00%,0,3,9:00 PM,ct 4,,9:00 PM,ct 3,,,,,,,,,,,,,,,,,,,,,,,,\r\nPeri Duncan,14,Fun 4s  AG,100.00%,3,0,9:00 PM,ct 4,,9:00 PM,ct 1,,,,,,,,,,,,,,,,,,,,,,,,\r\nDaniel Mendoza,15,Fun 4s  AG,66.67%,2,1,7:00 PM,ct 3,,9:00 PM,ct 1,,,,,,,,,,,,,,,,,,,,,,,,\r\nMatt Boggs,16,Fun 4s  AG,0.00%,0,3,6:00 PM,ct 3,,7:00 PM,ct 2,,,,,,,,,,,,,,,,,,,,,,,,\r\nTim W,17,Fun 4s  AG,0.00%,0,3,9:00 PM,ct 3,,6:00 PM,ct 3,,,,,,,,,,,,,,,,,,,,,,,,\r\nVin W #1,18,Fun 4s  AG,33.33%,1,2,7:00 PM,ct 3,,6:00 PM,ct 1,,,,,,,,,,,,,,,,,,,,,,,,\r\nVin W  #2,19,Fun 4s  AG,0.00%,0,3,8:00 PM,ct 3,,7:00 PM,ct 1,,,,,,,,,,,,,,,,,,,,,,,,\r\nMark K,20,Fun 4s  AG,100.00%,3,0,6:00 PM,ct 3,,6:00 PM,ct 4,,,,,,,,,,,,,,,,,,,,,,,,\r\nBlake A,21,Fun 4s  AG,0.00%,0,3,6:00 PM,ct 1,,7:00 PM,ct 2,,,,,,,,,,,,,,,,,,,,,,,,\r\nWally W,22,Fun 4s  AG,100.00%,3,0,8:00 PM,ct 3,,8:00 PM,ct 1,,,,,,,,,,,,,,,,,,,,,,,,\r\nHappy McThicc,23,Fun 4s  AG,66.67%,2,1,7:00 PM,ct 13,,6:00 PM,ct 4,,,,,,,,,,,,,,,,,,,,,,,,\r\nErik A,24,Fun 4s  AG,66.67%,2,1,7:00 PM,ct 4,,7:00 PM,ct 4,,,,,,,,,,,,,,,,,,,,,,,,\r\ntalia  grier,25,Fun 4s  AG,0.00%,0,3,8:00 PM,ct 2,,7:00 PM,ct 1,,,,,,,,,,,,,,,,,,,,,,,,\r\nTrey Sanders,26,Fun 4s  AG,100.00%,3,0,8:00 PM,ct 2,,8:00 PM,ct 1,,,,,,,,,,,,,,,,,,,,,,,,\r\nJesse Mittino #2,27,Fun 4s  AG,#DIV/0!,,,,,,8:00 PM,ct 2,,,,,,,,,,,,,,,,,,,,,,,,\r\n,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,\r\n,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,\r\nGabriel H.,1,Fun 6s,66.67%,2,1,6:00 PM,ct 13,,8:00 PM,ct 13,,,,,,,,,,,,,,,,,,,,,,,,\r\nHunter E.,2,Fun 6s,33.33%,1,2,6:00 PM,ct 13,,7:00 PM,ct 13,,,,,,,,,,,,,,,,,,,,,,,,\r\nEmma R.,3,Fun 6s,100.00%,3,0,7:00 PM,ct 13,,6:00 PM,ct 13,,,,,,,,,,,,,,,,,,,,,,,,\r\nMeghan O.,4,Fun 6s,0.00%,0,3,7:00 PM,ct 13,,7:00 PM,ct 13,,,,,,,,,,,,,,,,,,,,,,,,\r\nGreg T,5,Fun 6s,0.00%,0,3,8:00 PM,ct 13,,8:00 PM,ct 13,,,,,,,,,,,,,,,,,,,,,,,,\r\nBelle Michaud,6,Fun 6s,100.00%,3,0,8:00 PM,ct 13,,6:00 PM,ct 13,,,,,,,,,,,,,,,,,,,,,,,,"
+
+	tests := []struct {
+		name     string
+		teamName string
+		expected int // expected number of games found
+		wantErr  bool
+	}{
+		{
+			name:     "Parse games for Taylor Sisneros",
+			teamName: "Taylor Sisneros",
+			expected: 1, // 1 scheduled games
+			wantErr:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parser := NewCSVParser(tt.teamName)
+			games, err := parser.ParseSchedule(csvData)
+
+			if tt.wantErr {
+				assert.Error(t, err, "Expected an error but got none")
+			} else {
+				assert.NoError(t, err, "Unexpected error")
+			}
+
+			assert.Equal(t, tt.expected, len(games), "Expected %d games, got %d", tt.expected, len(games))
 
 			// Verify game structure for first game if any exist
 			if len(games) > 0 {

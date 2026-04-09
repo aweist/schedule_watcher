@@ -11,6 +11,13 @@ import (
 	"github.com/aweist/schedule-watcher/models"
 )
 
+// columnMap maps normalized header names to column indices.
+type columnMap struct {
+	captain  int
+	teamNum  int
+	division int
+}
+
 type CSVParser struct {
 	teamName string
 	year     int
@@ -37,6 +44,7 @@ func (p *CSVParser) ParseSchedule(csvData string) ([]models.Game, error) {
 	var games []models.Game
 	headers := records[0]
 
+	colMap := p.buildColumnMap(headers)
 	dateColumns := p.findDateColumns(headers)
 
 	for i := 1; i < len(records); i++ {
@@ -45,7 +53,7 @@ func (p *CSVParser) ParseSchedule(csvData string) ([]models.Game, error) {
 			continue
 		}
 
-		teamCaptain := strings.TrimSpace(row[0])
+		teamCaptain := strings.TrimSpace(row[colMap.captain])
 		if teamCaptain == "" || strings.Contains(teamCaptain, "Fall Schedule") {
 			continue
 		}
@@ -54,8 +62,8 @@ func (p *CSVParser) ParseSchedule(csvData string) ([]models.Game, error) {
 			continue
 		}
 
-		teamNum, _ := strconv.Atoi(row[1])
-		division := strings.TrimSpace(row[3])
+		teamNum, _ := strconv.Atoi(row[colMap.teamNum])
+		division := strings.TrimSpace(row[colMap.division])
 
 		for _, colIdx := range dateColumns {
 			if colIdx > 0 && colIdx < len(row) {
@@ -112,6 +120,28 @@ func gameTimeStrToGameTimes(s string) []string {
 		gameTimes = append(gameTimes, part)
 	}
 	return gameTimes
+}
+
+func (p *CSVParser) buildColumnMap(headers []string) columnMap {
+	cm := columnMap{
+		captain:  0, // default to first column
+		teamNum:  -1,
+		division: -1,
+	}
+
+	for i, header := range headers {
+		normalized := strings.ToLower(strings.TrimSpace(header))
+		switch {
+		case strings.Contains(normalized, "captain") || normalized == "team captain":
+			cm.captain = i
+		case normalized == "team #" || normalized == "team num" || normalized == "team number":
+			cm.teamNum = i
+		case strings.Contains(normalized, "division"):
+			cm.division = i
+		}
+	}
+
+	return cm
 }
 
 func (p *CSVParser) findDateColumns(headers []string) map[int]int {

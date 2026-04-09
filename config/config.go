@@ -32,7 +32,6 @@ type EmailConfig struct {
 	Username string
 	Password string
 	From     string
-	To       []string
 }
 
 type StorageConfig struct {
@@ -65,7 +64,6 @@ func LoadFromEnv() *Config {
 			Username: os.Getenv("SMTP_USERNAME"),
 			Password: os.Getenv("SMTP_PASSWORD"),
 			From:     os.Getenv("EMAIL_FROM"),
-			To:       []string{os.Getenv("EMAIL_TO")},
 		},
 		Storage: StorageConfig{
 			DatabasePath: getEnv("DB_PATH", "./schedule.db"),

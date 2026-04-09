@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"log"
 	"time"
@@ -65,13 +66,36 @@ func (p *Poller) poll() {
 		log.Printf("Error fetching schedule: %v", err)
 		return
 	}
-	
+
+	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(schedule.CSVData)))
+
+	lastHash, err := p.storage.GetLatestSnapshotHash()
+	if err != nil {
+		log.Printf("Error getting latest snapshot hash: %v", err)
+	}
+
+	if hash == lastHash {
+		log.Println("Schedule unchanged, skipping processing")
+		return
+	}
+
+	snapshot := models.Snapshot{
+		ID:        fmt.Sprintf("snap-%s", hash[:12]),
+		CSVData:   schedule.CSVData,
+		Hash:      hash,
+		FetchedAt: time.Now(),
+	}
+	if err := p.storage.SaveSnapshot(snapshot); err != nil {
+		log.Printf("Error saving snapshot: %v", err)
+	}
+	log.Printf("Saved new schedule snapshot %s", snapshot.ID)
+
 	games, err := p.parser.ParseSchedule(schedule.CSVData)
 	if err != nil {
 		log.Printf("Error parsing schedule: %v", err)
 		return
 	}
-	
+
 	log.Printf("Found %d games for tracked team", len(games))
 	
 	newGamesFound := 0

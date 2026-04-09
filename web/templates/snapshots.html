@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Schedule Snapshots</title>
+
+    <!-- Common CSS -->
+    <link rel="stylesheet" href="/static/css/common.css">
+
+    <!-- Feather Icons CDN -->
+    <script src="https://unpkg.com/feather-icons"></script>
+
+    <style>
+        .count {
+            background: #667eea;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            font-weight: normal;
+        }
+
+        .nav {
+            margin-top: 20px;
+        }
+
+        .nav a {
+            color: #667eea;
+            text-decoration: none;
+            margin-right: 20px;
+            font-weight: 500;
+        }
+
+        .nav a:hover {
+            text-decoration: underline;
+        }
+
+        h2 {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .hash {
+            font-family: monospace;
+            font-size: 0.85em;
+            color: #666;
+        }
+
+        .snapshot-row {
+            cursor: pointer;
+        }
+
+        .snapshot-row:hover td {
+            background: #f0edff;
+        }
+
+        .csv-preview {
+            display: none;
+            background: #f8f9fa;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            padding: 12px;
+            margin-top: 8px;
+            max-height: 400px;
+            overflow: auto;
+            white-space: pre;
+            font-family: monospace;
+            font-size: 0.8em;
+            line-height: 1.4;
+        }
+
+        .csv-preview.open {
+            display: block;
+        }
+
+        .expand-cell {
+            text-align: center;
+            width: 30px;
+        }
+
+        .expand-icon {
+            transition: transform 0.2s;
+            display: inline-block;
+        }
+
+        .expand-icon.open {
+            transform: rotate(90deg);
+        }
+    </style>
+</head>
+<body>
+    <div class="container container-sm">
+        <div class="header">
+            <h1>Schedule Snapshots</h1>
+            <div class="nav">
+                <a href="/">← Back to Debug View</a>
+                <a href="/admin">Email Recipients</a>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>Snapshots <span class="count">{{len .Snapshots}}</span></h2>
+            {{if .Snapshots}}
+            <table>
+                <thead>
+                    <tr>
+                        <th class="expand-cell"></th>
+                        <th>Fetched At</th>
+                        <th>Snapshot ID</th>
+                        <th>Hash</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range $i, $snap := .Snapshots}}
+                    <tr class="snapshot-row" onclick="togglePreview({{$i}})">
+                        <td class="expand-cell"><span class="expand-icon" id="icon-{{$i}}">&#9654;</span></td>
+                        <td>{{$snap.FetchedAt.Format "Jan 2, 2006 3:04:05 PM"}}</td>
+                        <td><code>{{$snap.ID}}</code></td>
+                        <td><span class="hash">{{slice $snap.Hash 0 16}}...</span></td>
+                    </tr>
+                    <tr>
+                        <td colspan="4" style="padding: 0; border: none;">
+                            <div class="csv-preview" id="preview-{{$i}}">{{$snap.CSVData}}</div>
+                        </td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+            {{else}}
+            <div class="empty-state">No snapshots recorded yet. Snapshots are saved each time the schedule changes.</div>
+            {{end}}
+        </div>
+    </div>
+
+    <script>
+        feather.replace();
+
+        function togglePreview(index) {
+            const preview = document.getElementById('preview-' + index);
+            const icon = document.getElementById('icon-' + index);
+            preview.classList.toggle('open');
+            icon.classList.toggle('open');
+        }
+    </script>
+</body>
+</html>

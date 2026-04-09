@@ -10,9 +10,10 @@ import (
 )
 
 const (
-	bucketGames = "games"
-	bucketNotified = "notified"
+	bucketGames     = "games"
+	bucketNotified  = "notified"
 	bucketRecipients = "recipients"
+	bucketSnapshots = "snapshots"
 )
 
 type BoltStorage struct {
@@ -40,7 +41,12 @@ func NewBoltStorage(dbPath string) (*BoltStorage, error) {
 		if err != nil {
 			return fmt.Errorf("creating recipients bucket: %w", err)
 		}
-		
+
+		_, err = tx.CreateBucketIfNotExists([]byte(bucketSnapshots))
+		if err != nil {
+			return fmt.Errorf("creating snapshots bucket: %w", err)
+		}
+
 		return nil
 	})
 	
@@ -296,4 +302,59 @@ func (s *BoltStorage) DeleteEmailRecipient(id string) error {
 
 func (s *BoltStorage) UpdateEmailRecipient(recipient models.EmailRecipient) error {
 	return s.AddEmailRecipient(recipient)
+}
+
+func (s *BoltStorage) SaveSnapshot(snapshot models.Snapshot) error {
+	return s.db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(bucketSnapshots))
+
+		data, err := json.Marshal(snapshot)
+		if err != nil {
+			return fmt.Errorf("marshaling snapshot: %w", err)
+		}
+
+		return b.Put([]byte(snapshot.ID), data)
+	})
+}
+
+func (s *BoltStorage) GetLatestSnapshotHash() (string, error) {
+	var latestHash string
+	var latestTime time.Time
+
+	err := s.db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(bucketSnapshots))
+
+		return b.ForEach(func(k, v []byte) error {
+			var snap models.Snapshot
+			if err := json.Unmarshal(v, &snap); err != nil {
+				return err
+			}
+			if snap.FetchedAt.After(latestTime) {
+				latestTime = snap.FetchedAt
+				latestHash = snap.Hash
+			}
+			return nil
+		})
+	})
+
+	return latestHash, err
+}
+
+func (s *BoltStorage) GetAllSnapshots() ([]models.Snapshot, error) {
+	var snapshots []models.Snapshot
+
+	err := s.db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(bucketSnapshots))
+
+		return b.ForEach(func(k, v []byte) error {
+			var snap models.Snapshot
+			if err := json.Unmarshal(v, &snap); err != nil {
+				return err
+			}
+			snapshots = append(snapshots, snap)
+			return nil
+		})
+	})
+
+	return snapshots, err
 }
