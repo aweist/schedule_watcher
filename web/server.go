@@ -74,7 +74,7 @@ func (s *Server) Start() {
 	if err != nil {
 		log.Printf("Failed to create static file system: %v", err)
 	}
-	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFS))))
+	http.Handle("/static/", http.StripPrefix("/static/", noCacheHandler(http.FileServer(http.FS(staticFS)))))
 
 	http.HandleFunc("/", s.handleDebugPage)
 	http.HandleFunc("/admin", s.handleAdminPage)
@@ -338,6 +338,13 @@ func (s *Server) handleSnapshotsPage(w http.ResponseWriter, r *http.Request) {
 	if err := tmpl.Execute(w, data); err != nil {
 		http.Error(w, fmt.Sprintf("Template execution error: %v", err), http.StatusInternalServerError)
 	}
+}
+
+func noCacheHandler(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-cache, must-revalidate")
+		next.ServeHTTP(w, r)
+	})
 }
 
 func generateID() string {
