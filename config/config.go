@@ -1,28 +1,30 @@
 package config
 
 import (
-	"fmt"
 	"os"
 	"time"
 )
 
 type Config struct {
-	API      APIConfig
-	Team     TeamConfig
 	Email    EmailConfig
 	Storage  StorageConfig
 	Schedule ScheduleConfig
 	Web      WebConfig
+	Leagues  map[string]LeagueConfig
 }
 
-type APIConfig struct {
-	BaseURL  string
-	Instance string
-	CompID   string
+type LeagueConfig struct {
+	Type         string
+	NotifyMode   string
+	ReminderTime string
+	API          map[string]string
+	Teams        []TeamEntry
 }
 
-type TeamConfig struct {
+type TeamEntry struct {
+	Key  string
 	Name string
+	Day  string
 }
 
 type EmailConfig struct {
@@ -47,86 +49,54 @@ type WebConfig struct {
 	Port    string
 }
 
-func LoadFromEnv() *Config {
+func Load() *Config {
 	return &Config{
-		API: APIConfig{
-			BaseURL:  getEnv("API_BASE_URL", "https://wix-visual-data.appspot.com"),
-			Instance: os.Getenv("API_INSTANCE"),
-			CompID:   os.Getenv("API_COMP_ID"),
-		},
-		Team: TeamConfig{
-			Name: getEnv("TEAM_NAME", ""),
-		},
 		Email: EmailConfig{
-			Enabled:  getEnvBool("EMAIL_ENABLED", true),
-			SMTPHost: getEnv("SMTP_HOST", "smtp.gmail.com"),
-			SMTPPort: getEnv("SMTP_PORT", "587"),
+			Enabled:  true,
+			SMTPHost: "smtp.gmail.com",
+			SMTPPort: "587",
 			Username: os.Getenv("SMTP_USERNAME"),
 			Password: os.Getenv("SMTP_PASSWORD"),
 			From:     os.Getenv("EMAIL_FROM"),
 		},
 		Storage: StorageConfig{
-			DatabasePath: getEnv("DB_PATH", "./schedule.db"),
+			DatabasePath: "./schedule.db",
 		},
 		Schedule: ScheduleConfig{
-			PollInterval: getEnv("POLL_INTERVAL", "5m"),
+			PollInterval: "5m",
 		},
 		Web: WebConfig{
-			Enabled: getEnvBool("WEB_ENABLED", true),
-			Port:    getEnv("WEB_PORT", "8080"),
+			Enabled: true,
+			Port:    "8080",
+		},
+		Leagues: map[string]LeagueConfig{
+			"IVP": {
+				Type: "ivp",
+				API: map[string]string{
+					"base_url": "https://wix-visual-data.appspot.com",
+					"instance": os.Getenv("API_INSTANCE"),
+					"comp_id":  os.Getenv("API_COMP_ID"),
+				},
+				Teams: []TeamEntry{
+					{Key: "Taylor Sisneros", Name: "Taylor Sisneros"},
+				},
+			},
+			"PINS": {
+				Type:         "pins",
+				NotifyMode:   "daily_reminder",
+				ReminderTime: "08:00",
+				API: map[string]string{
+					"base_url": "https://pins.killerworld.com",
+				},
+				Teams: []TeamEntry{
+					{Key: "French Toast Mafia", Name: "French Toast Mafia", Day: "Wed"},
+				},
+			},
 		},
 	}
-}
-
-func (c *Config) Validate() error {
-	if c.API.BaseURL == "" {
-		return fmt.Errorf("api.base_url is required")
-	}
-
-	if c.API.Instance == "" {
-		return fmt.Errorf("api.instance is required")
-	}
-
-	if c.API.CompID == "" {
-		return fmt.Errorf("api.comp_id is required")
-	}
-
-	if c.Team.Name == "" {
-		return fmt.Errorf("team.name is required")
-	}
-
-	if c.Email.Enabled {
-		if c.Email.SMTPHost == "" {
-			return fmt.Errorf("email.smtp_host is required when email is enabled")
-		}
-
-		if c.Email.From == "" {
-			return fmt.Errorf("email.from is required when email is enabled")
-		}
-	}
-
-	if _, err := time.ParseDuration(c.Schedule.PollInterval); err != nil {
-		return fmt.Errorf("invalid poll_interval: %w", err)
-	}
-
-	return nil
 }
 
 func (c *Config) GetPollInterval() time.Duration {
 	d, _ := time.ParseDuration(c.Schedule.PollInterval)
 	return d
-}
-
-func getEnv(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return defaultValue
-}
-
-func getEnvBool(key string, defaultValue bool) bool {
-	if value := os.Getenv(key); value != "" {
-		return value == "true" || value == "1"
-	}
-	return defaultValue
 }

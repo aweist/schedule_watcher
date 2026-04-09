@@ -5,6 +5,6 @@ import (
 )
 
 type Notifier interface {
-	SendNotification(game models.Game) error
+	SendNotification(game models.Game, recipients []string) error
 	GetType() string
 }

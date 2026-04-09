@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/aweist/schedule-watcher/league"
 	"github.com/aweist/schedule-watcher/models"
 	"github.com/aweist/schedule-watcher/notifier"
 	"github.com/aweist/schedule-watcher/storage"
@@ -27,8 +28,15 @@ var staticFiles embed.FS
 
 type Server struct {
 	storage   *storage.BoltStorage
-	notifiers []notifier.Notifier
+	notifier  notifier.Notifier
 	port      string
+	leagues   []league.League
+}
+
+type LeagueTeam struct {
+	League   string
+	TeamKey  string
+	TeamName string
 }
 
 type PageData struct {
@@ -37,38 +45,38 @@ type PageData struct {
 	CurrentTime   string
 	CurrentDate   string
 	Now           time.Time
-	TeamName      string
+	Leagues       []league.League
 }
 
 type AdminPageData struct {
-	Recipients []models.EmailRecipient
+	Recipients  []models.EmailRecipient
+	LeagueTeams []LeagueTeam
 }
 
 type SnapshotsPageData struct {
 	Snapshots []models.Snapshot
 }
 
-func NewServer(storage *storage.BoltStorage, port string) *Server {
+func NewServer(storage *storage.BoltStorage, port string, leagues []league.League) *Server {
 	return &Server{
-		storage:   storage,
-		notifiers: nil, // Will be set later
-		port:      port,
+		storage: storage,
+		port:    port,
+		leagues: leagues,
 	}
 }
 
-func (s *Server) SetNotifiers(notifiers []notifier.Notifier) {
-	s.notifiers = notifiers
+func (s *Server) SetNotifier(n notifier.Notifier) {
+	s.notifier = n
 }
 
-func (s *Server) Start(teamName string) {
-	// Serve static files
+func (s *Server) Start() {
 	staticFS, err := fs.Sub(staticFiles, "static")
 	if err != nil {
 		log.Printf("Failed to create static file system: %v", err)
 	}
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFS))))
-	
-	http.HandleFunc("/", s.handleDebugPage(teamName))
+
+	http.HandleFunc("/", s.handleDebugPage)
 	http.HandleFunc("/admin", s.handleAdminPage)
 	http.HandleFunc("/snapshots", s.handleSnapshotsPage)
 	http.HandleFunc("/api/games", s.handleAPIGames)
@@ -79,56 +87,52 @@ func (s *Server) Start(teamName string) {
 	http.HandleFunc("/api/recipients/add", s.handleAddRecipient)
 	http.HandleFunc("/api/recipients/delete", s.handleDeleteRecipient)
 	http.HandleFunc("/api/recipients/toggle", s.handleToggleRecipient)
-	
+
 	log.Printf("Starting debug web server on http://localhost:%s", s.port)
 	if err := http.ListenAndServe(":"+s.port, nil); err != nil {
 		log.Printf("Web server error: %v", err)
 	}
 }
 
-func (s *Server) handleDebugPage(teamName string) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		tmpl, err := template.ParseFS(templates, "templates/debug.html")
-		if err != nil {
-			http.Error(w, fmt.Sprintf("Template error: %v", err), http.StatusInternalServerError)
-			return
-		}
+func (s *Server) handleDebugPage(w http.ResponseWriter, r *http.Request) {
+	tmpl, err := template.ParseFS(templates, "templates/debug.html")
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Template error: %v", err), http.StatusInternalServerError)
+		return
+	}
 
-		games, err := s.storage.GetAllGames()
-		if err != nil {
-			http.Error(w, fmt.Sprintf("Error fetching games: %v", err), http.StatusInternalServerError)
-			return
-		}
+	games, err := s.storage.GetAllGames()
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error fetching games: %v", err), http.StatusInternalServerError)
+		return
+	}
 
-		notifiedGames, err := s.storage.GetAllNotifiedGames()
-		if err != nil {
-			http.Error(w, fmt.Sprintf("Error fetching notified games: %v", err), http.StatusInternalServerError)
-			return
-		}
+	notifiedGames, err := s.storage.GetAllNotifiedGames()
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error fetching notified games: %v", err), http.StatusInternalServerError)
+		return
+	}
 
-		// Sort games by date
-		sort.Slice(games, func(i, j int) bool {
-			return games[i].Date.Before(games[j].Date)
-		})
+	sort.Slice(games, func(i, j int) bool {
+		return games[i].Date.Before(games[j].Date)
+	})
 
-		// Sort notified games by notification time (most recent first)
-		sort.Slice(notifiedGames, func(i, j int) bool {
-			return notifiedGames[i].NotifiedAt.After(notifiedGames[j].NotifiedAt)
-		})
+	sort.Slice(notifiedGames, func(i, j int) bool {
+		return notifiedGames[i].NotifiedAt.After(notifiedGames[j].NotifiedAt)
+	})
 
-		now := time.Now()
-		data := PageData{
-			Games:         games,
-			NotifiedGames: notifiedGames,
-			CurrentTime:   now.Format("2006-01-02 15:04:05 MST"),
-			CurrentDate:   now.Format("2006-01-02"),
-			Now:           now,
-			TeamName:      teamName,
-		}
+	now := time.Now()
+	data := PageData{
+		Games:         games,
+		NotifiedGames: notifiedGames,
+		CurrentTime:   now.Format("2006-01-02 15:04:05 MST"),
+		CurrentDate:   now.Format("2006-01-02"),
+		Now:           now,
+		Leagues:       s.leagues,
+	}
 
-		if err := tmpl.Execute(w, data); err != nil {
-			http.Error(w, fmt.Sprintf("Template execution error: %v", err), http.StatusInternalServerError)
-		}
+	if err := tmpl.Execute(w, data); err != nil {
+		http.Error(w, fmt.Sprintf("Template execution error: %v", err), http.StatusInternalServerError)
 	}
 }
 
@@ -160,18 +164,20 @@ func (s *Server) handleDeleteGame(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	leagueName := r.FormValue("league")
+	teamKey := r.FormValue("team_key")
 	gameID := r.FormValue("id")
 	if gameID == "" {
 		http.Error(w, "Game ID is required", http.StatusBadRequest)
 		return
 	}
 
-	if err := s.storage.DeleteGame(gameID); err != nil {
+	if err := s.storage.DeleteGame(leagueName, teamKey, gameID); err != nil {
 		http.Error(w, fmt.Sprintf("Error deleting game: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("Deleted game: %s", gameID)
+	log.Printf("Deleted game: %s/%s/%s", leagueName, teamKey, gameID)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
 }
@@ -182,18 +188,20 @@ func (s *Server) handleDeleteNotifiedGame(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	leagueName := r.FormValue("league")
+	teamKey := r.FormValue("team_key")
 	gameID := r.FormValue("id")
 	if gameID == "" {
 		http.Error(w, "Game ID is required", http.StatusBadRequest)
 		return
 	}
 
-	if err := s.storage.DeleteNotifiedGame(gameID); err != nil {
+	if err := s.storage.DeleteNotifiedGame(leagueName, teamKey, gameID); err != nil {
 		http.Error(w, fmt.Sprintf("Error deleting notified game: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("Deleted notified game: %s", gameID)
+	log.Printf("Deleted notified game: %s/%s/%s", leagueName, teamKey, gameID)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
 }
@@ -204,18 +212,37 @@ func (s *Server) handleTestEmail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if len(s.notifiers) == 0 {
+	if s.notifier == nil {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{
-			"status": "error", 
-			"message": "No email notifiers configured",
+			"status":  "error",
+			"message": "No email notifier configured",
 		})
 		return
 	}
 
-	// Create a test game
+	// Get all active recipients across all leagues/teams
+	allRecipients, err := s.storage.GetAllEmailRecipients()
+	if err != nil || len(allRecipients) == 0 {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{
+			"status":  "error",
+			"message": "No email recipients configured",
+		})
+		return
+	}
+
+	var emails []string
+	for _, r := range allRecipients {
+		if r.IsActive {
+			emails = append(emails, r.Email)
+		}
+	}
+
 	testGame := models.Game{
 		ID:          "test-email-" + fmt.Sprintf("%d", time.Now().Unix()),
+		League:      "test",
+		TeamKey:     "test",
 		TeamCaptain: "Test Team",
 		TeamNumber:  99,
 		Division:    "Test Division",
@@ -224,25 +251,20 @@ func (s *Server) handleTestEmail(w http.ResponseWriter, r *http.Request) {
 		Court:       "Test Court",
 	}
 
-	// Send test notification
-	for _, n := range s.notifiers {
-		if n.GetType() == "email" {
-			if err := n.SendNotification(testGame); err != nil {
-				log.Printf("Test email failed: %v", err)
-				w.Header().Set("Content-Type", "application/json")
-				json.NewEncoder(w).Encode(map[string]string{
-					"status": "error", 
-					"message": fmt.Sprintf("Email test failed: %v", err),
-				})
-				return
-			}
-		}
+	if err := s.notifier.SendNotification(testGame, emails); err != nil {
+		log.Printf("Test email failed: %v", err)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{
+			"status":  "error",
+			"message": fmt.Sprintf("Email test failed: %v", err),
+		})
+		return
 	}
 
 	log.Printf("Test email sent successfully")
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
-		"status": "success",
+		"status":  "success",
 		"message": "Test email sent successfully!",
 	})
 }
@@ -260,13 +282,31 @@ func (s *Server) handleAdminPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Sort recipients by name
 	sort.Slice(recipients, func(i, j int) bool {
+		if recipients[i].League != recipients[j].League {
+			return recipients[i].League < recipients[j].League
+		}
+		if recipients[i].TeamKey != recipients[j].TeamKey {
+			return recipients[i].TeamKey < recipients[j].TeamKey
+		}
 		return recipients[i].Name < recipients[j].Name
 	})
 
+	// Build league/team list for the add form dropdown
+	var leagueTeams []LeagueTeam
+	for _, lg := range s.leagues {
+		for _, t := range lg.Teams() {
+			leagueTeams = append(leagueTeams, LeagueTeam{
+				League:   lg.Name(),
+				TeamKey:  t.Key,
+				TeamName: fmt.Sprintf("%s - %s", lg.DisplayName(), t.Name),
+			})
+		}
+	}
+
 	data := AdminPageData{
-		Recipients: recipients,
+		Recipients:  recipients,
+		LeagueTeams: leagueTeams,
 	}
 
 	if err := tmpl.Execute(w, data); err != nil {
@@ -287,7 +327,6 @@ func (s *Server) handleSnapshotsPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Sort by fetched time, most recent first
 	sort.Slice(snapshots, func(i, j int) bool {
 		return snapshots[i].FetchedAt.After(snapshots[j].FetchedAt)
 	})
@@ -315,35 +354,39 @@ func (s *Server) handleAddRecipient(w http.ResponseWriter, r *http.Request) {
 
 	name := r.FormValue("name")
 	email := r.FormValue("email")
+	leagueName := r.FormValue("league")
+	teamKey := r.FormValue("team_key")
 
-	if name == "" || email == "" {
+	if name == "" || email == "" || leagueName == "" || teamKey == "" {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{
-			"status": "error",
-			"message": "Name and email are required",
+			"status":  "error",
+			"message": "Name, email, league, and team are required",
 		})
 		return
 	}
 
 	recipient := models.EmailRecipient{
 		ID:       generateID(),
+		League:   leagueName,
+		TeamKey:  teamKey,
 		Name:     name,
 		Email:    email,
 		AddedAt:  time.Now(),
 		IsActive: true,
 	}
 
-	if err := s.storage.AddEmailRecipient(recipient); err != nil {
+	if err := s.storage.AddRecipientForTeam(leagueName, teamKey, recipient); err != nil {
 		log.Printf("Error adding recipient: %v", err)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{
-			"status": "error",
+			"status":  "error",
 			"message": "Error adding recipient",
 		})
 		return
 	}
 
-	log.Printf("Added email recipient: %s (%s)", name, email)
+	log.Printf("Added email recipient: %s (%s) for %s/%s", name, email, leagueName, teamKey)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
 }
@@ -355,20 +398,23 @@ func (s *Server) handleDeleteRecipient(w http.ResponseWriter, r *http.Request) {
 	}
 
 	recipientID := r.FormValue("id")
+	leagueName := r.FormValue("league")
+	teamKey := r.FormValue("team_key")
+
 	if recipientID == "" {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{
-			"status": "error",
+			"status":  "error",
 			"message": "Recipient ID is required",
 		})
 		return
 	}
 
-	if err := s.storage.DeleteEmailRecipient(recipientID); err != nil {
+	if err := s.storage.DeleteEmailRecipient(leagueName, teamKey, recipientID); err != nil {
 		log.Printf("Error deleting recipient: %v", err)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{
-			"status": "error",
+			"status":  "error",
 			"message": "Error deleting recipient",
 		})
 		return
@@ -391,7 +437,7 @@ func (s *Server) handleToggleRecipient(w http.ResponseWriter, r *http.Request) {
 	if recipientID == "" || activeStr == "" {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{
-			"status": "error",
+			"status":  "error",
 			"message": "Recipient ID and active status are required",
 		})
 		return
@@ -401,30 +447,28 @@ func (s *Server) handleToggleRecipient(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{
-			"status": "error",
+			"status":  "error",
 			"message": "Invalid active status",
 		})
 		return
 	}
 
-	// Get existing recipient
 	recipient, err := s.storage.GetEmailRecipient(recipientID)
 	if err != nil || recipient == nil {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{
-			"status": "error",
+			"status":  "error",
 			"message": "Recipient not found",
 		})
 		return
 	}
 
-	// Update status
 	recipient.IsActive = active
 	if err := s.storage.UpdateEmailRecipient(*recipient); err != nil {
 		log.Printf("Error updating recipient: %v", err)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{
-			"status": "error",
+			"status":  "error",
 			"message": "Error updating recipient",
 		})
 		return

@@ -37,5 +37,5 @@ RUN mkdir -p /data
 # Expose volume for persistence
 VOLUME ["/data"]
 
-# Run the application
+# Run the application with config file
 CMD ["./schedule-watcher"]

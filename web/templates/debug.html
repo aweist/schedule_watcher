@@ -4,13 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Volleyball Schedule Watcher - Debug View</title>
-    
+
     <!-- Common CSS -->
     <link rel="stylesheet" href="/static/css/common.css">
-    
+
     <!-- Feather Icons CDN -->
     <script src="https://unpkg.com/feather-icons"></script>
-    
+
     <style>
         /* Page-specific styles for debug view */
         .info {
@@ -18,24 +18,24 @@
             font-size: 14px;
             margin-top: 10px;
         }
-        
+
         .info span {
             background: #f0f0f0;
             padding: 4px 8px;
             border-radius: 4px;
             margin-right: 10px;
         }
-        
+
         .grid {
             margin-bottom: 30px;
         }
-        
+
         h2 {
             display: flex;
             align-items: center;
             gap: 10px;
         }
-        
+
         .count {
             background: #667eea;
             color: white;
@@ -44,7 +44,7 @@
             font-size: 0.8em;
             font-weight: normal;
         }
-        
+
         .game-id {
             font-family: monospace;
             font-size: 11px;
@@ -53,11 +53,11 @@
             padding: 2px 6px;
             border-radius: 3px;
         }
-        
+
         .date {
             font-weight: 500;
         }
-        
+
         .time {
             background: #e3f2fd;
             padding: 4px 8px;
@@ -65,30 +65,43 @@
             font-weight: 500;
             display: inline-block;
         }
-        
+
         .court {
             background: #f3e5f5;
             padding: 4px 8px;
             border-radius: 4px;
             display: inline-block;
         }
-        
+
         .team {
             font-weight: 500;
             color: #667eea;
         }
-        
+
         .division {
             font-size: 12px;
             color: #666;
         }
-        
+
+        .league-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            color: white;
+            background: #667eea;
+        }
+
+        .league-badge.ivp { background: #4caf50; }
+        .league-badge.pins { background: #ff9800; }
+
         .notified-at {
             color: #4caf50;
             font-size: 12px;
         }
-        
-        /* Use common classes from common.css */
+
         .refresh-btn {
             background: #667eea;
             color: white;
@@ -99,11 +112,11 @@
             font-size: 14px;
             transition: background 0.3s;
         }
-        
+
         .refresh-btn:hover {
             background: #5a67d8;
         }
-        
+
         .delete-btn {
             background: #e53e3e;
             color: white;
@@ -118,23 +131,23 @@
             align-items: center;
             justify-content: center;
         }
-        
+
         .delete-btn i {
             width: 16px;
             height: 16px;
         }
-        
+
         .delete-btn:hover {
             background: #c53030;
         }
-        
+
         .status {
             display: flex;
             gap: 20px;
             align-items: center;
             margin-top: 10px;
         }
-        
+
         .status-indicator {
             display: flex;
             align-items: center;
@@ -142,13 +155,13 @@
             font-size: 12px;
             color: #666;
         }
-        
+
         .dot {
             width: 10px;
             height: 10px;
             border-radius: 50%;
         }
-        
+
         .dot.future { background: #4caf50; }
         .dot.today { background: #ff9800; }
         .dot.past { background: #9e9e9e; }
@@ -159,7 +172,6 @@
         <div class="header">
             <h1>Volleyball Schedule Watcher</h1>
             <div class="info">
-                <span>Team: <strong>{{.TeamName}}</strong></span>
                 <span>Last Refresh: <strong>{{.CurrentTime}}</strong></span>
                 <button class="refresh-btn" onclick="location.reload()">Refresh</button>
                 <button class="refresh-btn" onclick="testEmail()">Test Email</button>
@@ -181,7 +193,7 @@
                 </div>
             </div>
         </div>
-        
+
         <div class="grid grid-2col">
             <div class="section">
                 <h2>All Games <span class="count">{{len .Games}}</span></h2>
@@ -189,23 +201,25 @@
                 <table>
                     <thead>
                         <tr>
+                            <th>League</th>
                             <th>Date</th>
                             <th>Time</th>
                             <th>Court</th>
                             <th>Team</th>
-                            <th>Division</th>
+                            <th>Opponent</th>
                             <th>Action</th>
                         </tr>
                     </thead>
                     <tbody>
                         {{range .Games}}
                         <tr class="{{if gt .Date.Unix 0}}{{if lt .Date.Unix $.Now.Unix}}game-past{{else if eq (.Date.Format "2006-01-02") $.CurrentDate}}game-today{{else}}game-future{{end}}{{end}}">
+                            <td><span class="league-badge {{.League}}">{{.League}}</span></td>
                             <td class="date">{{.Date.Format "Jan 2, 2006"}}</td>
                             <td><span class="time">{{.Time}}</span></td>
                             <td><span class="court">Court {{.Court}}</span></td>
-                            <td class="team">{{.TeamCaptain}} (#{{.TeamNumber}})</td>
-                            <td class="division">{{.Division}}</td>
-                            <td><button class="delete-btn" onclick="deleteGame('{{.ID}}')"><i data-feather="trash-2"></i></button></td>
+                            <td class="team">{{.TeamCaptain}}{{if .TeamNumber}} (#{{.TeamNumber}}){{end}}</td>
+                            <td>{{.Opponent}}</td>
+                            <td><button class="delete-btn" onclick="deleteGame('{{.League}}', '{{.TeamKey}}', '{{.ID}}')"><i data-feather="trash-2"></i></button></td>
                         </tr>
                         {{end}}
                     </tbody>
@@ -214,13 +228,14 @@
                 <div class="empty-state">No games found</div>
                 {{end}}
             </div>
-            
+
             <div class="section">
                 <h2>Notified Games <span class="count">{{len .NotifiedGames}}</span></h2>
                 {{if .NotifiedGames}}
                 <table>
                     <thead>
                         <tr>
+                            <th>League</th>
                             <th>Game Date</th>
                             <th>Time</th>
                             <th>Court</th>
@@ -232,12 +247,13 @@
                     <tbody>
                         {{range .NotifiedGames}}
                         <tr>
+                            <td><span class="league-badge {{.League}}">{{.League}}</span></td>
                             <td class="date">{{.GameDate.Format "Jan 2, 2006"}}</td>
                             <td><span class="time">{{.GameTime}}</span></td>
                             <td><span class="court">Court {{.Court}}</span></td>
                             <td class="team">{{.TeamCaptain}}</td>
                             <td class="notified-at">{{.NotifiedAt.Format "Jan 2 15:04"}}</td>
-                            <td><button class="delete-btn" onclick="deleteNotifiedGame('{{.GameID}}')"><i data-feather="trash-2"></i></button></td>
+                            <td><button class="delete-btn" onclick="deleteNotifiedGame('{{.League}}', '{{.TeamKey}}', '{{.GameID}}')"><i data-feather="trash-2"></i></button></td>
                         </tr>
                         {{end}}
                     </tbody>
@@ -248,19 +264,18 @@
             </div>
         </div>
     </div>
-    
+
     <script>
-        // Initialize Feather icons
         feather.replace();
-        
-        function deleteGame(gameId) {
+
+        function deleteGame(league, teamKey, gameId) {
             if (confirm('Are you sure you want to delete this game?')) {
                 fetch('/api/game/delete', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded',
                     },
-                    body: 'id=' + encodeURIComponent(gameId)
+                    body: 'league=' + encodeURIComponent(league) + '&team_key=' + encodeURIComponent(teamKey) + '&id=' + encodeURIComponent(gameId)
                 })
                 .then(response => response.json())
                 .then(data => {
@@ -277,14 +292,14 @@
             }
         }
 
-        function deleteNotifiedGame(gameId) {
+        function deleteNotifiedGame(league, teamKey, gameId) {
             if (confirm('Are you sure you want to remove this notification record?')) {
                 fetch('/api/notified/delete', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded',
                     },
-                    body: 'id=' + encodeURIComponent(gameId)
+                    body: 'league=' + encodeURIComponent(league) + '&team_key=' + encodeURIComponent(teamKey) + '&id=' + encodeURIComponent(gameId)
                 })
                 .then(response => response.json())
                 .then(data => {
@@ -311,14 +326,14 @@
             .then(response => response.json())
             .then(data => {
                 if (data.status === 'success') {
-                    alert('✅ ' + data.message);
+                    alert(data.message);
                 } else {
-                    alert('❌ ' + data.message);
+                    alert(data.message);
                 }
             })
             .catch(error => {
                 console.error('Error:', error);
-                alert('❌ Error testing email');
+                alert('Error testing email');
             });
         }
     </script>

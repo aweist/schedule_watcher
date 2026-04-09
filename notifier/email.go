@@ -19,12 +19,6 @@ type EmailNotifier struct {
 	username string
 	password string
 	from     string
-	teamName string
-	storage  EmailStorage
-}
-
-type EmailStorage interface {
-	GetActiveEmailRecipients() ([]models.EmailRecipient, error)
 }
 
 type EmailConfig struct {
@@ -33,8 +27,6 @@ type EmailConfig struct {
 	Username string
 	Password string
 	From     string
-	TeamName string
-	Storage  EmailStorage
 }
 
 func NewEmailNotifier(config EmailConfig) *EmailNotifier {
@@ -44,8 +36,6 @@ func NewEmailNotifier(config EmailConfig) *EmailNotifier {
 		username: config.Username,
 		password: config.Password,
 		from:     config.From,
-		teamName: config.TeamName,
-		storage:  config.Storage,
 	}
 }
 
@@ -53,28 +43,20 @@ func (e *EmailNotifier) GetType() string {
 	return "email"
 }
 
-func (e *EmailNotifier) SendNotification(game models.Game) error {
-	// Get recipients from database
-	recipients, err := e.getRecipients()
-	if err != nil {
-		return fmt.Errorf("getting recipients: %w", err)
-	}
-	
+func (e *EmailNotifier) SendNotification(game models.Game, recipients []string) error {
 	if len(recipients) == 0 {
-		return fmt.Errorf("no active email recipients configured")
+		return fmt.Errorf("no email recipients provided")
 	}
 
-	subject := fmt.Sprintf("New Volleyball Game Scheduled - %s", game.Date.Format("Mon, Jan 2"))
+	leagueName := strings.ToUpper(game.League)
+	subject := fmt.Sprintf("[%s] New Volleyball Game Scheduled - %s", leagueName, game.Date.Format("Mon, Jan 2"))
 	body, err := e.buildEmailBody(game)
 	if err != nil {
 		return fmt.Errorf("building email body: %w", err)
 	}
 
-	// Generate ICS calendar content
 	icsContent := GenerateICS(game)
-	
-	// Build message with attachment
-	message := e.buildMessageWithAttachment(subject, body, recipients, icsContent, game.Date.Format("2006-01-02"))
+	message := e.buildMessageWithAttachment(subject, body, recipients, icsContent, game.Date.Format("2006-01-02"), leagueName)
 
 	auth := smtp.PlainAuth("", e.username, e.password, e.smtpHost)
 	addr := fmt.Sprintf("%s:%s", e.smtpHost, e.smtpPort)
@@ -87,63 +69,35 @@ func (e *EmailNotifier) SendNotification(game models.Game) error {
 	return nil
 }
 
-func (e *EmailNotifier) getRecipients() ([]string, error) {
-	// Storage is required for getting recipients
-	if e.storage == nil {
-		return nil, fmt.Errorf("no storage configured for email recipients")
-	}
-	
-	dbRecipients, err := e.storage.GetActiveEmailRecipients()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get recipients from database: %w", err)
-	}
-	
-	var emails []string
-	for _, r := range dbRecipients {
-		emails = append(emails, r.Email)
-	}
-	
-	if len(emails) == 0 {
-		return nil, fmt.Errorf("no active email recipients in database")
-	}
-	
-	return emails, nil
-}
-
-func (e *EmailNotifier) buildMessageWithAttachment(subject, body string, recipients []string, icsContent string, dateStr string) string {
+func (e *EmailNotifier) buildMessageWithAttachment(subject, body string, recipients []string, icsContent string, dateStr string, leagueName string) string {
 	var buf bytes.Buffer
 	writer := multipart.NewWriter(&buf)
-	
-	// Write email headers
+
 	headers := make(map[string]string)
-	headers["From"] = fmt.Sprintf("IVP Game Alerts <%s>", e.from)
+	headers["From"] = fmt.Sprintf("%s Game Alerts <%s>", leagueName, e.from)
 	headers["To"] = strings.Join(recipients, ", ")
 	headers["Subject"] = subject
 	headers["MIME-Version"] = "1.0"
 	headers["Content-Type"] = fmt.Sprintf("multipart/mixed; boundary=%s", writer.Boundary())
-	
+
 	var message strings.Builder
 	for k, v := range headers {
 		message.WriteString(fmt.Sprintf("%s: %s\r\n", k, v))
 	}
 	message.WriteString("\r\n")
-	
-	// Create HTML part
+
 	htmlPart, _ := writer.CreatePart(textproto.MIMEHeader{
 		"Content-Type": []string{"text/html; charset=UTF-8"},
 	})
 	htmlPart.Write([]byte(body))
-	
-	// Create ICS attachment part
+
 	icsPart, _ := writer.CreatePart(textproto.MIMEHeader{
 		"Content-Type":              []string{"text/calendar; charset=UTF-8; method=REQUEST"},
 		"Content-Transfer-Encoding": []string{"base64"},
 		"Content-Disposition":       []string{fmt.Sprintf("attachment; filename=\"volleyball-game-%s.ics\"", dateStr)},
 	})
-	
-	// Encode ICS content in base64
+
 	encoded := base64.StdEncoding.EncodeToString([]byte(icsContent))
-	// Add line breaks every 76 characters for proper email formatting
 	for i := 0; i < len(encoded); i += 76 {
 		end := i + 76
 		if end > len(encoded) {
@@ -151,17 +105,18 @@ func (e *EmailNotifier) buildMessageWithAttachment(subject, body string, recipie
 		}
 		icsPart.Write([]byte(encoded[i:end] + "\r\n"))
 	}
-	
+
 	writer.Close()
-	
-	// Combine headers and body
+
 	message.Write(buf.Bytes())
-	
+
 	return message.String()
 }
 
-
 func (e *EmailNotifier) buildEmailBody(game models.Game) (string, error) {
+	leagueName := strings.ToUpper(game.League)
+	scheduleLink := getScheduleLink(game.League)
+
 	tmplStr := `
 <!DOCTYPE html>
 <html>
@@ -234,10 +189,13 @@ func (e *EmailNotifier) buildEmailBody(game models.Game) (string, error) {
 <body>
     <div class="container">
         <div class="header">
-            <h1>🏐 New Game Alert!</h1>
+            <h1>New {{.LeagueName}} Game Alert!</h1>
         </div>
-        <div class="content">            
+        <div class="content">
             <div class="game-details">
+                <div class="detail-row">
+                    <span class="label">League:</span> {{.LeagueName}}
+                </div>
                 <div class="detail-row">
                     <span class="label">Date:</span> {{.Date}}
                 </div>
@@ -247,26 +205,33 @@ func (e *EmailNotifier) buildEmailBody(game models.Game) (string, error) {
                 <div class="detail-row">
                     <span class="label">Court:</span> {{.Court}}
                 </div>
+                {{if .Division}}
                 <div class="detail-row">
                     <span class="label">Division:</span> {{.Division}}
                 </div>
+                {{end}}
                 <div class="detail-row">
-                    <span class="label">Team:</span> {{.TeamCaptain}} (#{{.TeamNumber}})
+                    <span class="label">Team:</span> {{.TeamCaptain}}{{if .TeamNumber}} (#{{.TeamNumber}}){{end}}
                 </div>
+                {{if .Opponent}}
+                <div class="detail-row">
+                    <span class="label">Opponent:</span> {{.Opponent}}
+                </div>
+                {{end}}
             </div>
-            
+
             <p style="text-align: center; margin: 20px 0;">
-                <em>📅 A calendar invite is attached to this email</em>
+                <em>A calendar invite is attached to this email</em>
             </p>
-            
+
+            {{if .ScheduleLink}}
             <div class="schedule-link">
-                <a href="https://winlossdraw.com/ivp" target="_blank">See the full schedule here</a>
+                <a href="{{.ScheduleLink}}" target="_blank">See the full schedule here</a>
             </div>
-            
-            <p>Remember to suck the head!</p>
-            
+            {{end}}
+
             <div class="footer">
-                <p>This is an automated notification from the IVP Schedule Watcher</p>
+                <p>This is an automated notification from the {{.LeagueName}} Schedule Watcher</p>
             </div>
         </div>
     </div>
@@ -280,21 +245,25 @@ func (e *EmailNotifier) buildEmailBody(game models.Game) (string, error) {
 	}
 
 	data := struct {
-		TeamName    string
-		Date        string
-		Time        string
-		Court       string
-		Division    string
-		TeamCaptain string
-		TeamNumber  int
+		LeagueName   string
+		Date         string
+		Time         string
+		Court        string
+		Division     string
+		TeamCaptain  string
+		TeamNumber   int
+		Opponent     string
+		ScheduleLink string
 	}{
-		TeamName:    e.teamName,
-		Date:        game.Date.Format("Monday, January 2, 2006"),
-		Time:        game.Time,
-		Court:       game.Court,
-		Division:    game.Division,
-		TeamCaptain: game.TeamCaptain,
-		TeamNumber:  game.TeamNumber,
+		LeagueName:   leagueName,
+		Date:         game.Date.Format("Monday, January 2, 2006"),
+		Time:         game.Time,
+		Court:        game.Court,
+		Division:     game.Division,
+		TeamCaptain:  game.TeamCaptain,
+		TeamNumber:   game.TeamNumber,
+		Opponent:     game.Opponent,
+		ScheduleLink: scheduleLink,
 	}
 
 	var buf bytes.Buffer
@@ -304,4 +273,15 @@ func (e *EmailNotifier) buildEmailBody(game models.Game) (string, error) {
 	}
 
 	return buf.String(), nil
+}
+
+func getScheduleLink(league string) string {
+	switch strings.ToLower(league) {
+	case "ivp":
+		return "https://winlossdraw.com/ivp"
+	case "pins":
+		return "https://pins.killerworld.com/schedules.cgi"
+	default:
+		return ""
+	}
 }
