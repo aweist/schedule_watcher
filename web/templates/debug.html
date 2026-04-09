@@ -157,7 +157,7 @@
 <body>
     <div class="container container-lg">
         <div class="header">
-            <h1>🏐 Volleyball Schedule Watcher</h1>
+            <h1>Volleyball Schedule Watcher</h1>
             <div class="info">
                 <span>Team: <strong>{{.TeamName}}</strong></span>
                 <span>Last Refresh: <strong>{{.CurrentTime}}</strong></span>
@@ -253,11 +253,6 @@
         // Initialize Feather icons
         feather.replace();
         
-        // Auto-refresh every 30 seconds
-        setTimeout(() => {
-            location.reload();
-        }, 30000);
-
         function deleteGame(gameId) {
             if (confirm('Are you sure you want to delete this game?')) {
                 fetch('/api/game/delete', {

@@ -26,6 +26,9 @@ go.work
 *.db
 data/
 
+# Air live reload
+tmp/
+
 # IDE files
 .idea/
 .vscode/
