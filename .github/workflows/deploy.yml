@@ -6,7 +6,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: aweist/schedule-watcher
+  IMAGE_NAME: aweist/schedule_watcher
 
 jobs:
   build-and-push:
