@@ -21,6 +21,7 @@ type IVPLeague struct {
 	compID       string
 	teams        []league.TeamConfig
 	teamEntries  []config.TeamEntry
+	lastRawCSV   string
 }
 
 func New(name string, cfg config.LeagueConfig) (*IVPLeague, error) {
@@ -63,12 +64,14 @@ func (l *IVPLeague) DisplayName() string        { return l.displayName }
 func (l *IVPLeague) NotifyMode() string         { return l.notifyMode }
 func (l *IVPLeague) ReminderTime() string       { return l.reminderTime }
 func (l *IVPLeague) Teams() []league.TeamConfig { return l.teams }
+func (l *IVPLeague) LastRawData() string        { return l.lastRawCSV }
 
 func (l *IVPLeague) FetchAndParse() (map[string][]models.Game, error) {
 	schedule, err := l.apiClient.FetchSchedule(l.instance, l.compID)
 	if err != nil {
 		return nil, fmt.Errorf("fetching IVP schedule: %w", err)
 	}
+	l.lastRawCSV = schedule.CSVData
 
 	result := make(map[string][]models.Game)
 

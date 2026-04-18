@@ -4,7 +4,7 @@ services:
     container_name: volleyball-schedule-watcher
     restart: unless-stopped
     environment:
-      # Secrets passed via env vars, referenced in config.yaml as ${VAR}
+      # Secrets and SMTP config passed via env vars (loaded from .env on the droplet)
       - API_INSTANCE=${API_INSTANCE}
       - API_COMP_ID=${API_COMP_ID}
       - SMTP_HOST=${SMTP_HOST}
@@ -21,14 +21,10 @@ services:
       - "${WEB_PORT:-8080}:8080"
 
     volumes:
-      - schedule-data:/data
+      - ./data:/data
 
     logging:
       driver: "json-file"
       options:
         max-size: "10m"
         max-file: "3"
-
-volumes:
-  schedule-data:
-    driver: local

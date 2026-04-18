@@ -312,10 +312,18 @@ func (s *Server) handleSnapshotsPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	snapshots, err := s.storage.GetAllSnapshots()
+	allSnapshots, err := s.storage.GetAllSnapshots()
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Error fetching snapshots: %v", err), http.StatusInternalServerError)
 		return
+	}
+
+	// Only IVP snapshots carry raw CSV data worth viewing; skip the rest.
+	var snapshots []models.Snapshot
+	for _, snap := range allSnapshots {
+		if snap.League == "ivp" {
+			snapshots = append(snapshots, snap)
+		}
 	}
 
 	sort.Slice(snapshots, func(i, j int) bool {

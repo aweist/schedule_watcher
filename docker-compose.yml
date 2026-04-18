@@ -8,7 +8,7 @@ services:
     container_name: volleyball-schedule-watcher
     restart: unless-stopped
     environment:
-      # Secrets passed via env vars, referenced in config.yaml as ${VAR}
+      # Secrets and SMTP config passed via env vars (loaded from .env)
       - API_INSTANCE=${API_INSTANCE}
       - API_COMP_ID=${API_COMP_ID}
       - SMTP_HOST=${SMTP_HOST}

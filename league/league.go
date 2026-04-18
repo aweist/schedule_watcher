@@ -35,3 +35,11 @@ type TeamConfig struct {
 	Key  string // Stable identifier
 	Name string // Display name
 }
+
+// RawDataProvider is optionally implemented by leagues whose raw upstream
+// payload (e.g., CSV, HTML) is worth archiving in snapshots for debugging
+// historical schedule changes. Leagues that don't implement it produce
+// snapshots without stored raw data.
+type RawDataProvider interface {
+	LastRawData() string
+}

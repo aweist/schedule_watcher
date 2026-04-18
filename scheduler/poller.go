@@ -80,6 +80,9 @@ func (p *Poller) poll() {
 				Hash:      dataHash,
 				FetchedAt: time.Now(),
 			}
+			if provider, ok := lg.(league.RawDataProvider); ok {
+				snapshot.CSVData = provider.LastRawData()
+			}
 			if err := p.storage.SaveSnapshot(snapshot); err != nil {
 				log.Printf("Error saving snapshot: %v", err)
 			}
