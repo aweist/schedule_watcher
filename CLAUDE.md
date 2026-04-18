@@ -6,8 +6,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Development
 ```bash
-# Run the application locally
-go run main.go -config config.yaml
+# Run the application locally (loads .env via dotenv)
+go run main.go
+
+# Live-reload dev loop (recompiles + restarts on file change)
+air
 
 # Install dependencies
 go mod download
@@ -25,15 +28,37 @@ go test -cover ./...
 # Build binary
 go build -o schedule-watcher
 
-# Run with Docker Compose
-docker-compose up -d
+# Run with Docker Compose (local)
+docker compose up -d
 
 # View container logs
-docker-compose logs -f
+docker compose logs -f
 ```
 
+Air is configured via [.air.toml](.air.toml) and runs the binary through `dotenv --` so `.env` values are loaded automatically. Watches `.go`, `.html`, `.css` files; excludes `tmp/`, `data/`, `docs/`, `scripts/`.
+
 ### Configuration
-The application uses a YAML config file (`config.yaml`). Copy `config.yaml.example` to `config.yaml` and configure. Secrets can be injected via `${ENV_VAR}` interpolation in the YAML.
+Config lives in Go code at [config/config.go](config/config.go) — there is **no** YAML config file. `config.Load()` returns a hardcoded struct; only secrets and the SMTP host/port come from environment variables (loaded from `.env` locally, passed through `docker-compose*.yml` in containers).
+
+Required env vars:
+- `SMTP_HOST`, `SMTP_PORT` — SMTP relay (prod uses `smtp.mailgun.org:587`)
+- `SMTP_USERNAME`, `SMTP_PASSWORD`, `EMAIL_FROM` — SMTP auth + sender
+- `API_INSTANCE`, `API_COMP_ID` — IVP Wix API credentials
+- `TZ` — timezone (defaults to `America/Denver`)
+
+To change polling interval, reminder time, tracked teams, etc., edit the struct literal in `config.Load()` and redeploy. The startup log line `Email notifications enabled: host=... from=...` confirms SMTP config is wired correctly (see [main.go:79](main.go#L79)).
+
+### Deployment
+Prod runs on a Digital Ocean droplet. Pushing to `main` triggers [.github/workflows/deploy.yml](.github/workflows/deploy.yml):
+1. Builds and pushes image to `ghcr.io/aweist/schedule_watcher`
+2. SSHes to the droplet, `cd /opt/schedule-watcher`, `git pull`, `docker compose -f docker-compose.prod.yml pull && down && up -d`
+
+The droplet has a `.env` file at `/opt/schedule-watcher/.env` with production secrets. Container logs are capped at 30MB (3×10MB rotated json-file) and **are wiped on every deploy** (because `docker compose down` removes the container). For logs spanning deploys, grab them before redeploying:
+```bash
+ssh <droplet> 'docker logs -t volleyball-schedule-watcher' > logs.txt
+```
+
+`scripts/build-and-push.sh` is a manual build/push helper; it no longer drives deployment (GitHub Actions does).
 
 ## Architecture Overview
 
@@ -48,13 +73,14 @@ This is a **multi-league volleyball schedule monitoring service** that polls mul
 
 **Data Flow**: League.FetchAndParse() → Storage → Notification System
 
-1. **`league/league.go`**: `League` interface that all schedule sources implement (`FetchAndParse()`, `Name()`, `Teams()`)
-2. **`league/factory.go`**: Registry-based factory that builds League instances from config. Leagues self-register via `init()`.
+1. **`league/league.go`**: `League` interface (`Name`, `DisplayName`, `NotifyMode`, `ReminderTime`, `FetchAndParse`, `Teams`) plus the `NotifyImmediate` / `NotifyDailyReminder` mode constants
+2. **`main.go`**: Constructs leagues via a `switch leagueConfig.Type` dispatch (no factory registry — just `case "ivp"` / `case "pins"`)
 3. **`league/ivp/ivp.go`**: IVP league implementation wrapping existing `client/` and `parser/` packages
 4. **`league/pins/`**: PINS league implementation with HTML client, auto-discovery, and HTML table parser
 5. **`storage/bolt.go`**: BoltDB persistence with scoped keys (`league:teamKey:id`) for multi-league isolation
 6. **`notifier/`**: Interface-based notification system. Recipients are per-team per-league, stored in DB.
-7. **`scheduler/poller.go`**: Iterates over all leagues, fetches/parses, processes new games, sends notifications
+7. **`scheduler/poller.go`**: Iterates over all leagues, fetches/parses, processes new games, sends immediate-mode notifications
+8. **`scheduler/reminder.go`**: Separate per-minute loop that fires game-day reminders for `daily_reminder` leagues at each league's `ReminderTime`
 
 ### Key Data Structures
 
@@ -63,21 +89,37 @@ This is a **multi-league volleyball schedule monitoring service** that polls mul
 - **`models.EmailRecipient`**: Per-league/team email recipients stored in DB
 - **`notifier.Notifier`**: Interface: `SendNotification(game, recipients) error`
 
-### Config Structure (`config.yaml`)
+### Config Structure (in Go)
 
-```yaml
-leagues:
-  - type: ivp       # or "pins"
-    name: IVP        # Display name
-    api:             # League-specific params (map[string]string)
-      base_url: ...
-      instance: ...
-      comp_id: ...
-    teams:
-      - key: weist   # Stable key for storage scoping
-        name: Weist   # Name used for team matching
-        day: Tue      # Required for PINS (day of week for season discovery)
+Defined in [config/config.go](config/config.go). `Config.Leagues` is a `map[string]LeagueConfig` keyed by display name:
+
+```go
+Leagues: map[string]LeagueConfig{
+    "IVP": {
+        Type: "ivp",                 // dispatched in main.go switch
+        // NotifyMode defaults to "immediate" if unset
+        API: map[string]string{
+            "base_url": "https://wix-visual-data.appspot.com",
+            "instance": os.Getenv("API_INSTANCE"),
+            "comp_id":  os.Getenv("API_COMP_ID"),
+        },
+        Teams: []TeamEntry{
+            {Key: "Taylor Sisneros", Name: "Taylor Sisneros"},
+        },
+    },
+    "PINS": {
+        Type:         "pins",
+        NotifyMode:   "daily_reminder",
+        ReminderTime: "08:00",        // HH:MM, local TZ
+        API: map[string]string{"base_url": "https://pins.killerworld.com"},
+        Teams: []TeamEntry{
+            {Key: "French Toast Mafia", Name: "French Toast Mafia", Day: "Wed"},
+        },
+    },
+},
 ```
+
+`TeamEntry.Day` (3-letter weekday) is required for PINS — used to match the current season in the schedule dropdown.
 
 ### PINS Auto-Discovery
 
@@ -110,6 +152,14 @@ type Notifier interface {
 
 Recipients are managed per league/team via the web admin UI and stored in BoltDB. Email content includes league name, opponent info, and league-specific schedule links.
 
+**Two delivery modes** (`league.NotifyMode()`):
+- **`immediate`** (IVP): poller sends as soon as a new game is discovered.
+- **`daily_reminder`** (PINS): poller saves the game silently; `scheduler/reminder.go` sends the email on the morning of the game at `ReminderTime`.
+
+**Retry behavior**: both paths gate on `storage.IsGameNotified` (not on "newly discovered") and only call `MarkGameNotified` when `SendNotification` returns nil. So a transient SMTP failure (timeout, 5xx) leaves the game un-notified and it retries on the next poll / next reminder tick. If SMTP stays broken indefinitely, we'll keep retrying — acceptable given the volume.
+
+**Test email** ([web/server.go](web/server.go) `/api/test-email`): takes an `email` form param and sends a synthetic game to just that address. The debug page has a modal that collects it — do **not** send to "all recipients".
+
 ### Testing Notes
 
 Tests exist for:
@@ -120,7 +170,7 @@ Tests exist for:
 ### Adding a New League
 
 1. Create `league/{name}/` package
-2. Implement `league.League` interface
-3. Register via `init()`: `league.Register("name", builderFunc)`
-4. Add config type handling in `config.Validate()`
-5. Import the package in `main.go` with blank import: `_ "...league/{name}"`
+2. Implement the `league.League` interface (see `league/ivp/ivp.go` for a minimal reference)
+3. Add a `case "{name}":` branch to the switch in [main.go:55](main.go#L55) that calls your constructor
+4. Add the league entry to `Leagues` in [config/config.go](config/config.go) `Load()` — including any required env-var-backed API params
+5. If the league uses `daily_reminder` mode, set `NotifyMode` and `ReminderTime` in the config entry
