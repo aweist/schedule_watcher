@@ -202,9 +202,7 @@
             .then(response => response.json())
             .then(data => {
                 if (data.status === 'success') {
-                    showAlert('Recipient added successfully!', 'success');
-                    e.target.reset();
-                    setTimeout(() => location.reload(), 1000);
+                    location.reload();
                 } else {
                     showAlert(data.message || 'Error adding recipient', 'error');
                 }
