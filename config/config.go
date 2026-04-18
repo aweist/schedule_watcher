@@ -53,8 +53,8 @@ func Load() *Config {
 	return &Config{
 		Email: EmailConfig{
 			Enabled:  true,
-			SMTPHost: "smtp.gmail.com",
-			SMTPPort: "587",
+			SMTPHost: os.Getenv("SMTP_HOST"),
+			SMTPPort: os.Getenv("SMTP_PORT"),
 			Username: os.Getenv("SMTP_USERNAME"),
 			Password: os.Getenv("SMTP_PASSWORD"),
 			From:     os.Getenv("EMAIL_FROM"),

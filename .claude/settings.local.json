@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:pins.killerworld.com)",
+      "Bash(curl -s https://pins.killerworld.com/schedules.cgi)",
+      "Bash(curl -s \"https://pins.killerworld.com/schedules.cgi?SCHEDULE_ID=169\")",
+      "Bash(curl -s \"https://pins.killerworld.com/schedules.cgi?SCHEDULE_ID=169&TEAM_ID=6762\")",
+      "Bash(go mod:*)",
+      "Bash(go test:*)",
+      "Bash(go build:*)",
+      "Bash(go vet:*)",
+      "Bash(gh run:*)",
+      "Bash(curl -s https://admin.winlossdraw.com/static/css/common.css)",
+      "Bash(curl -sI https://admin.winlossdraw.com/static/css/common.css)",
+      "Bash(curl -v https://admin.winlossdraw.com/static/css/common.css)",
+      "Bash(curl -s https://admin.winlossdraw.com/)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" https://admin.winlossdraw.com/)",
+      "Bash(curl -sL -o /dev/null -w \"%{http_code} -> %{url_effective}\" https://admin.winlossdraw.com/)"
+    ]
+  }
+}

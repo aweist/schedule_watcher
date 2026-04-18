@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/aweist/schedule-watcher/league"
@@ -212,8 +213,9 @@ func (s *Server) handleTestEmail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.Header().Set("Content-Type", "application/json")
+
 	if s.notifier == nil {
-		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{
 			"status":  "error",
 			"message": "No email notifier configured",
@@ -221,22 +223,13 @@ func (s *Server) handleTestEmail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get all active recipients across all leagues/teams
-	allRecipients, err := s.storage.GetAllEmailRecipients()
-	if err != nil || len(allRecipients) == 0 {
-		w.Header().Set("Content-Type", "application/json")
+	email := strings.TrimSpace(r.FormValue("email"))
+	if email == "" || !strings.Contains(email, "@") {
 		json.NewEncoder(w).Encode(map[string]string{
 			"status":  "error",
-			"message": "No email recipients configured",
+			"message": "A valid email address is required",
 		})
 		return
-	}
-
-	var emails []string
-	for _, r := range allRecipients {
-		if r.IsActive {
-			emails = append(emails, r.Email)
-		}
 	}
 
 	testGame := models.Game{
@@ -251,9 +244,8 @@ func (s *Server) handleTestEmail(w http.ResponseWriter, r *http.Request) {
 		Court:       "Test Court",
 	}
 
-	if err := s.notifier.SendNotification(testGame, emails); err != nil {
-		log.Printf("Test email failed: %v", err)
-		w.Header().Set("Content-Type", "application/json")
+	if err := s.notifier.SendNotification(testGame, []string{email}); err != nil {
+		log.Printf("Test email to %s failed: %v", email, err)
 		json.NewEncoder(w).Encode(map[string]string{
 			"status":  "error",
 			"message": fmt.Sprintf("Email test failed: %v", err),
@@ -261,11 +253,10 @@ func (s *Server) handleTestEmail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("Test email sent successfully")
-	w.Header().Set("Content-Type", "application/json")
+	log.Printf("Test email sent successfully to %s", email)
 	json.NewEncoder(w).Encode(map[string]string{
 		"status":  "success",
-		"message": "Test email sent successfully!",
+		"message": fmt.Sprintf("Test email sent to %s", email),
 	})
 }
 

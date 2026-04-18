@@ -100,13 +100,25 @@ func (p *Poller) poll() {
 
 				if isNew {
 					newGamesFound++
+				}
 
-					// Only send immediate notifications for "immediate" mode leagues
-					if lg.NotifyMode() == league.NotifyImmediate {
-						p.sendNotification(game)
-						if err := p.storage.MarkGameNotified(game); err != nil {
-							log.Printf("Error marking game as notified: %v", err)
-						}
+				// Immediate mode: notify any game not yet marked notified.
+				// Gating on notification state (rather than isNew) lets transient
+				// SMTP failures retry on subsequent polls.
+				if lg.NotifyMode() == league.NotifyImmediate {
+					notified, err := p.storage.IsGameNotified(game.League, game.TeamKey, game.ID)
+					if err != nil {
+						log.Printf("Error checking notification status for %s: %v", game.ID, err)
+						continue
+					}
+					if notified {
+						continue
+					}
+					if err := p.sendNotification(game); err != nil {
+						continue
+					}
+					if err := p.storage.MarkGameNotified(game); err != nil {
+						log.Printf("Error marking game as notified: %v", err)
 					}
 				}
 			}
@@ -146,20 +158,22 @@ func (p *Poller) saveNewGame(game models.Game) (bool, error) {
 }
 
 // sendNotification sends an email notification for a game to the team's recipients.
-func (p *Poller) sendNotification(game models.Game) {
+// Returns nil on success (or when there are no recipients to notify), or an error if
+// the send failed. Callers should only mark the game notified when this returns nil.
+func (p *Poller) sendNotification(game models.Game) error {
 	if p.notifier == nil {
-		return
+		return nil
 	}
 
 	recipients, err := p.storage.GetActiveRecipientsForTeam(game.League, game.TeamKey)
 	if err != nil {
 		log.Printf("Error getting recipients for %s/%s: %v", game.League, game.TeamKey, err)
-		return
+		return err
 	}
 
 	if len(recipients) == 0 {
 		log.Printf("No active recipients for %s/%s, skipping notification", game.League, game.TeamKey)
-		return
+		return nil
 	}
 
 	var emails []string
@@ -169,10 +183,11 @@ func (p *Poller) sendNotification(game models.Game) {
 
 	if err := p.notifier.SendNotification(game, emails); err != nil {
 		log.Printf("Error sending %s notification for game %s: %v", p.notifier.GetType(), game.ID, err)
-	} else {
-		log.Printf("Sent %s notification for %s game on %s at %s",
-			p.notifier.GetType(), game.League, game.Date.Format("Jan 2"), game.Time)
+		return err
 	}
+	log.Printf("Sent %s notification for %s game on %s at %s",
+		p.notifier.GetType(), game.League, game.Date.Format("Jan 2"), game.Time)
+	return nil
 }
 
 func hashGames(games []models.Game) string {

@@ -76,7 +76,7 @@ func main() {
 			Password: cfg.Email.Password,
 			From:     cfg.Email.From,
 		})
-		log.Println("Email notifications enabled")
+		log.Printf("Email notifications enabled: host=%s:%s from=%s", cfg.Email.SMTPHost, cfg.Email.SMTPPort, cfg.Email.From)
 	} else {
 		log.Println("WARNING: Email notifications disabled. Games will be tracked but no notifications will be sent.")
 	}

@@ -15,7 +15,6 @@ type DailyReminder struct {
 	leagues  []league.League
 	storage  *storage.BoltStorage
 	notifier notifier.Notifier
-	lastSent map[string]string // leagueName -> last date sent (YYYY-MM-DD)
 }
 
 func NewDailyReminder(leagues []league.League, store *storage.BoltStorage, n notifier.Notifier) *DailyReminder {
@@ -23,7 +22,6 @@ func NewDailyReminder(leagues []league.League, store *storage.BoltStorage, n not
 		leagues:  leagues,
 		storage:  store,
 		notifier: n,
-		lastSent: make(map[string]string),
 	}
 }
 
@@ -59,19 +57,15 @@ func (d *DailyReminder) check(leagues []league.League) {
 	today := now.Format("2006-01-02")
 
 	for _, lg := range leagues {
-		// Already sent reminders for this league today
-		if d.lastSent[lg.Name()] == today {
-			continue
-		}
-
 		// Check if it's time (compare HH:MM)
 		if currentTime < lg.ReminderTime() {
 			continue
 		}
 
-		log.Printf("Sending daily reminders for %s", lg.DisplayName())
+		// Per-game IsGameNotified check in sendRemindersForToday prevents
+		// duplicate sends; unnotified games (e.g., from a prior SMTP failure)
+		// will retry on the next tick.
 		d.sendRemindersForToday(lg, today)
-		d.lastSent[lg.Name()] = today
 	}
 }
 
@@ -116,10 +110,10 @@ func (d *DailyReminder) sendRemindersForToday(lg league.League, today string) {
 
 			if err := d.notifier.SendNotification(game, emails); err != nil {
 				log.Printf("Error sending daily reminder for %s game %s: %v", lg.DisplayName(), game.ID, err)
-			} else {
-				log.Printf("Sent daily reminder for %s: %s at %s on Court %s",
-					lg.DisplayName(), game.Date.Format("Jan 2"), game.Time, game.Court)
+				continue
 			}
+			log.Printf("Sent daily reminder for %s: %s at %s on Court %s",
+				lg.DisplayName(), game.Date.Format("Jan 2"), game.Time, game.Court)
 
 			// Mark as notified so we don't remind again
 			if err := d.storage.MarkGameNotified(game); err != nil {
