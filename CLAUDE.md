@@ -45,6 +45,7 @@ Required env vars:
 - `SMTP_USERNAME`, `SMTP_PASSWORD`, `EMAIL_FROM` — SMTP auth + sender
 - `API_INSTANCE`, `API_COMP_ID` — IVP Wix API credentials
 - `TZ` — timezone (defaults to `America/Denver`)
+- `DATABASE_PATH` — BoltDB path (defaults to `./schedule.db` for local dev; compose files set it to `/data/schedule.db` so the DB lands on the mounted volume and survives deploys)
 
 To change polling interval, reminder time, tracked teams, etc., edit the struct literal in `config.Load()` and redeploy. The startup log line `Email notifications enabled: host=... from=...` confirms SMTP config is wired correctly (see [main.go:79](main.go#L79)).
 

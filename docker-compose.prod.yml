@@ -12,6 +12,7 @@ services:
       - SMTP_USERNAME=${SMTP_USERNAME}
       - SMTP_PASSWORD=${SMTP_PASSWORD}
       - EMAIL_FROM=${EMAIL_FROM}
+      - DATABASE_PATH=/data/schedule.db
 
       # Timezone
       - TZ=${TZ:-America/Denver}

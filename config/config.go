@@ -60,7 +60,7 @@ func Load() *Config {
 			From:     os.Getenv("EMAIL_FROM"),
 		},
 		Storage: StorageConfig{
-			DatabasePath: "./schedule.db",
+			DatabasePath: envOr("DATABASE_PATH", "./schedule.db"),
 		},
 		Schedule: ScheduleConfig{
 			PollInterval: "5m",
@@ -99,4 +99,11 @@ func Load() *Config {
 func (c *Config) GetPollInterval() time.Duration {
 	d, _ := time.ParseDuration(c.Schedule.PollInterval)
 	return d
+}
+
+func envOr(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
 }
