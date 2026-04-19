@@ -58,36 +58,13 @@ func (p *Poller) poll() {
 			continue
 		}
 
+		p.maybeSaveSnapshot(lg, teamGames)
+
 		for _, team := range lg.Teams() {
 			games := teamGames[team.Key]
 			if len(games) == 0 {
 				continue
 			}
-
-			// Hash-based change detection per league
-			dataHash := hashGames(games)
-			lastHash, _ := p.storage.GetLatestSnapshotHash(lg.Name())
-
-			if dataHash == lastHash {
-				log.Printf("%s/%s: schedule unchanged, skipping", lg.DisplayName(), team.Key)
-				continue
-			}
-
-			// Save snapshot
-			snapshot := models.Snapshot{
-				ID:        fmt.Sprintf("snap-%s", dataHash[:12]),
-				League:    lg.Name(),
-				Hash:      dataHash,
-				FetchedAt: time.Now(),
-			}
-			if provider, ok := lg.(league.RawDataProvider); ok {
-				snapshot.CSVData = provider.LastRawData()
-			}
-			if err := p.storage.SaveSnapshot(snapshot); err != nil {
-				log.Printf("Error saving snapshot: %v", err)
-			}
-
-			log.Printf("%s/%s: found %d games", lg.DisplayName(), team.Key, len(games))
 
 			newGamesFound := 0
 			for _, game := range games {
@@ -191,6 +168,50 @@ func (p *Poller) sendNotification(game models.Game) error {
 	log.Printf("Sent %s notification for %s game on %s at %s",
 		p.notifier.GetType(), game.League, game.Date.Format("Jan 2"), game.Time)
 	return nil
+}
+
+// maybeSaveSnapshot hashes the league's upstream payload, compares to the
+// latest stored snapshot, and saves a new one only when the schedule has
+// actually changed. Prefers raw upstream data (via league.RawDataProvider)
+// because hashing parsed games can yield spurious differences from parse
+// ordering.
+func (p *Poller) maybeSaveSnapshot(lg league.League, teamGames map[string][]models.Game) {
+	var rawData string
+	if provider, ok := lg.(league.RawDataProvider); ok {
+		rawData = provider.LastRawData()
+	}
+
+	var dataHash string
+	if rawData != "" {
+		dataHash = fmt.Sprintf("%x", sha256.Sum256([]byte(rawData)))
+	} else {
+		var allGames []models.Game
+		for _, games := range teamGames {
+			allGames = append(allGames, games...)
+		}
+		if len(allGames) == 0 {
+			return
+		}
+		dataHash = hashGames(allGames)
+	}
+
+	lastHash, _ := p.storage.GetLatestSnapshotHash(lg.Name())
+	if dataHash == lastHash {
+		return
+	}
+
+	snapshot := models.Snapshot{
+		ID:        fmt.Sprintf("snap-%s", dataHash[:12]),
+		League:    lg.Name(),
+		Hash:      dataHash,
+		CSVData:   rawData,
+		FetchedAt: time.Now(),
+	}
+	if err := p.storage.SaveSnapshot(snapshot); err != nil {
+		log.Printf("Error saving snapshot: %v", err)
+		return
+	}
+	log.Printf("%s: schedule changed, saved new snapshot %s", lg.DisplayName(), snapshot.ID)
 }
 
 func hashGames(games []models.Game) string {
